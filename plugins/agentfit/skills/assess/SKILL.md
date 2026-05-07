@@ -1,14 +1,8 @@
-# /agentfit Command Specification
+---
+description: Analyzes a codebase for agent-readiness and produces a structured report scoring it across 5 dimensions
+---
 
-## Trigger
-
-```
-/agentfit
-```
-
-## Behavior
-
-When invoked, the skill performs the following steps in order:
+When invoked, perform the following steps in order:
 
 ### Step 1: Discover Project Structure
 - List root directory files and folders

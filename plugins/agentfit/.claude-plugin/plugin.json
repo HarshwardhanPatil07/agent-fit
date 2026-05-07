@@ -1,0 +1,8 @@
+{
+  "name": "agentfit",
+  "description": "Analyzes a codebase for agent-readiness and produces a structured report scoring it across 5 dimensions",
+  "version": "0.1.0",
+  "author": {
+    "name": "HarshwardhanPatil07"
+  }
+}
