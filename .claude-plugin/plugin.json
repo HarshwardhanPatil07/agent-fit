@@ -1,0 +1,14 @@
+{
+  "name": "agent-fit",
+  "owner": {
+    "name": "HarshwardhanPatil07"
+  },
+  "plugins": [
+    {
+      "name": "agentfit",
+      "source": "./plugins/agentfit",
+      "description": "Analyzes a codebase for agent-readiness and produces a structured report scoring it across 5 dimensions",
+      "version": "0.1.0"
+    }
+  ]
+}

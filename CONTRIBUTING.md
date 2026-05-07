@@ -16,6 +16,9 @@ Keep work inside the current structure unless explicitly discussed with the team
 - `plugins/agentfit/README.md`
 - `plugins/agentfit/commands/assess.md`
 - `plugins/agentfit/examples/sample-report.md`
+- `.claude-plugin/plugin.json`
+
+The `.claude-plugin/plugin.json` file is the marketplace manifest. Update the `version` field in this file when making a release. Do not change the `name`, `owner`, or `source` fields without team discussion.
 
 ## Branch Naming (Required)
 

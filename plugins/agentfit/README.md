@@ -4,10 +4,22 @@ A Claude Code skill that analyzes your codebase and tells you how ready your sof
 
 ## Install
 
-Copy the `plugins/agentfit/` directory into your project's `.claude/skills/agentfit/`:
+Add the following to your Claude Code settings (`.claude/settings.json` or global settings):
 
-```bash
-cp -r plugins/agentfit/ /path/to/your/project/.claude/skills/agentfit/
+```json
+{
+  "extraKnownMarketplaces": {
+    "agent-fit": {
+      "source": {
+        "source": "git",
+        "url": "git@github.com:HarshwardhanPatil07/agent-fit.git"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "agentfit@agent-fit": true
+  }
+}
 ```
 
 ## Run
