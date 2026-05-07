@@ -2,11 +2,16 @@
 
 ## Problem Statement
 
-The next users of software are AI agents. Agents need to discover, sign up for, and start using tools programmatically -- without a human in the loop. But most software being built today is designed for humans clicking buttons in a browser. Developers ship products with web UIs, OAuth consent screens, and documentation written for human eyes. None of that works for agents.
+Do you think next people on internet will be AI agents and now is the time to make something agents want?
 
-Every major category of software needs agent-first interfaces: machine-readable APIs, MCP servers, CLIs, programmatic auth, and documentation that agents can parse. But developers don't know what "agent-ready" means for their own codebase. There's no checklist, no linter, no CI check that tells you "your software is missing these things agents need."
+Agents are already browsing the web, doing research, making purchases, much more, but they are doing it on top of software that was designed for humans clicking buttons in a browser.
 
-While everyone is building skills to DO tasks, this skill assesses whether your software is READY for agents to use it.
+Agents needs completely new things “Machine-readable interfaces” like APIs, MCPs, and CLI. Agents also needs thorough documentation to enable them for discover, sign up for, and instantly start using new tools programmatically, without needing a human in the loop.
+
+That means every major category of software that people use today needs to be rebuilt for agents and the new agent first software.
+
+So while everyone is building a skill to do a task, what if we build the skill which assesses the software if it is agent-first?
+
 
 ## Demand Evidence
 
@@ -14,7 +19,7 @@ While everyone is building skills to DO tasks, this skill assesses whether your 
 - Others online expressing frustration with software lacking agent-friendly interfaces
 - MCP has 97M monthly SDK downloads and 10K+ servers -- the ecosystem is growing fast but most software hasn't caught up
 - Cloudflare's isitagentready.com exists (scores websites on agent readiness) but only checks web-layer signals, not your actual codebase
-- Factory.ai's /readiness-report exists (scores codebases) but focuses on dev workflow quality, not agent-consumability
+
 
 ## Status Quo
 
