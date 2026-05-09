@@ -7,8 +7,8 @@
     {
       "name": "agentfit",
       "source": "./plugins/agentfit",
-      "description": "Agent-readiness assessment: scan repositories for 82+ signals across 9 pillars, or run a quick local assessment across 5 dimensions",
-      "version": "0.2.0"
+      "description": "Analyzes a codebase for agent-readiness and produces a structured report scoring it across 5 dimensions",
+      "version": "0.1.0"
     }
   ]
 }
