@@ -1,0 +1,17 @@
+# See the OWNERS docs: https://git.k8s.io/community/contributors/guide/owners.md
+
+approvers:
+  - HarshwardhanPatil07
+  - Shreyashxredhat
+  - sahilkumbhar08
+  - vishnandaman
+  - KrishnaM256
+  - PratikMane0112
+
+reviewers:
+  - HarshwardhanPatil07
+  - Shreyashxredhat
+  - sahilkumbhar08
+  - vishnandaman
+  - KrishnaM256
+  - PratikMane0112
