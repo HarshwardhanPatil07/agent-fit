@@ -1,7 +1,7 @@
 {
   "name": "agentfit",
-  "description": "Analyzes a codebase for agent-readiness and produces a structured report scoring it across 5 dimensions",
-  "version": "0.1.0",
+  "description": "Scans a local or remote codebase and extracts agent-fit signals across 5 dimensions into a structured report",
+  "version": "0.2.0",
   "author": {
     "name": "HarshwardhanPatil07"
   }
