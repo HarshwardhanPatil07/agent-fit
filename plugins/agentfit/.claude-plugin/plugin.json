@@ -1,7 +1,7 @@
 {
   "name": "agentfit",
   "description": "Scans a local or remote codebase and extracts agent-fit signals across 5 dimensions into a structured report",
-  "version": "0.2.0",
+  "version": "0.1.0",
   "author": {
     "name": "HarshwardhanPatil07"
   }
