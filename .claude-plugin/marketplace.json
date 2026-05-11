@@ -7,8 +7,8 @@
     {
       "name": "agentfit",
       "source": "./plugins/agentfit",
-      "description": "Analyzes a codebase for agent-readiness and produces a structured report scoring it across 5 dimensions",
-      "version": "0.1.0"
+      "description": "Evaluates codebase agent-readiness across 9 pillars, 75+ criteria, and 5 maturity levels — produces an HTML report with pass rate scoring",
+      "version": "1.0.0"
     }
   ]
 }
