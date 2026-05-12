@@ -1,5 +1,5 @@
 ---
-description: Evaluates codebase agent-readiness across 9 pillars, 75+ criteria, and 5 maturity levels — produces an HTML report with pass rate scoring
+description: Evaluates codebase agent-readiness across 9 pillars, 80+ criteria, and 5 maturity levels — produces an HTML report with pass rate scoring
 ---
 
 When invoked, perform the following assessment. This is a READ-ONLY analysis — do NOT modify any files in the target codebase. The only file you create is the HTML report.
@@ -11,10 +11,12 @@ When invoked, perform the following assessment. This is a READ-ONLY analysis —
    - `go.mod` → Go
    - `Cargo.toml` → Rust
    - `pyproject.toml` or `setup.py` or `requirements.txt` → Python
+   - `pom.xml` or `build.gradle` or `build.gradle.kts` → Java/Kotlin
    - `package.json` with `tsconfig.json` → TypeScript
    - `package.json` without `tsconfig.json` → JavaScript
    - `CMakeLists.txt` or `Makefile` with `.cpp`/`.cc`/`.h` files → C++
    - `Package.swift` → Swift
+   - `mix.exs` → Elixir
    - If none found → Unknown
 3. Extract project name: use the current directory name.
 4. Extract repo path: run `git remote get-url origin 2>/dev/null` and parse `org/repo` from the URL. If no git remote, use the directory path.
@@ -43,13 +45,13 @@ When skipping, always explain why in the evidence field.
 
 Evaluate each criterion. For all config-parsing criteria, read the actual config file and report what rules/settings are configured.
 
-1. **formatter** (config_parsing) — Check for: `.prettierrc*`, `biome.json`, `pyproject.toml` with `[tool.black]` or `[tool.ruff.format]`, `rustfmt.toml`, `.clang-format`, `.editorconfig` with formatting rules, `gofumpt`/`goimports` in Makefile or CI. FOUND if any formatter is configured.
+1. **formatter** (config_parsing) — Check for: `.prettierrc*`, `biome.json`, `pyproject.toml` with `[tool.black]` or `[tool.ruff.format]`, `rustfmt.toml`, `.clang-format`, `.editorconfig` with formatting rules, `gofumpt`/`goimports` in Makefile or CI, `google-java-format` or `spotless` in Gradle/Maven config, `ktlint` config, `mix format` config (Elixir). FOUND if any formatter is configured.
 
-2. **lint_config** (config_parsing) — Check for: `.eslintrc*`, `eslint.config.*`, `biome.json` with linter, `.golangci.yml`, `pyproject.toml` with `[tool.ruff]` or `[tool.pylint]`, `clippy.toml` or `Cargo.toml` with clippy config, `.clang-tidy`. FOUND if linter configured with specific rules.
+2. **lint_config** (config_parsing) — Check for: `.eslintrc*`, `eslint.config.*`, `biome.json` with linter, `.golangci.yml`, `pyproject.toml` with `[tool.ruff]` or `[tool.pylint]`, `clippy.toml` or `Cargo.toml` with clippy config, `.clang-tidy`, Checkstyle config (`checkstyle.xml`), PMD ruleset (`pmd.xml`), SpotBugs/FindBugs config, `detekt.yml` (Kotlin), `credo` config (Elixir). FOUND if linter configured with specific rules.
 
-3. **type_check** (config_parsing) — Check for: `tsconfig.json`, `mypy.ini` or `pyproject.toml` with `[tool.mypy]`, Go compiler (always passes for Go), Rust compiler (always passes for Rust), `pyrightconfig.json`. FOUND if type checking is configured.
+3. **type_check** (config_parsing) — Check for: `tsconfig.json`, `mypy.ini` or `pyproject.toml` with `[tool.mypy]`, Go compiler (always passes for Go), Rust compiler (always passes for Rust), Java compiler (always passes for Java/Kotlin), `pyrightconfig.json`. FOUND if type checking is configured.
 
-4. **strict_typing** (config_parsing) — Check for: `tsconfig.json` with `"strict": true`, `mypy` with `strict = true` or `disallow_untyped_defs = true`, Go (always strict), Rust (always strict), Clippy pedantic. FOUND if strict mode is enabled.
+4. **strict_typing** (config_parsing) — Check for: `tsconfig.json` with `"strict": true`, `mypy` with `strict = true` or `disallow_untyped_defs = true`, Go (always strict), Rust (always strict), Java (always strict), Kotlin (always strict), Clippy pedantic. FOUND if strict mode is enabled.
 
 5. **pre_commit_hooks** (file_existence) — Check for: `.pre-commit-config.yaml`, `.husky/` directory, `.lefthook.yml`, `lint-staged` in `package.json`, `scripts/pre-commit*`. FOUND if any pre-commit hook framework is configured.
 
@@ -71,33 +73,33 @@ Evaluate each criterion. For all config-parsing criteria, read the actual config
 
 ### Pillar 2: Build System (19 criteria)
 
-1. **build_cmd_doc** (doc_content) — Check README.md, AGENTS.md, CLAUDE.md, Makefile, CONTRIBUTING.md for documented build/install/run commands. FOUND if build commands are clearly documented.
+1. **build_cmd_doc** (doc_content) — Check README.md, AGENTS.md, CLAUDE.md, Makefile, Taskfile.yml, Justfile, Earthfile, CONTRIBUTING.md for documented build/install/run commands. FOUND if build commands are clearly documented.
 
-2. **deps_pinned** (file_existence) — Check for: `go.sum`, `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `uv.lock`, `poetry.lock`, `Cargo.lock`, `Pipfile.lock`. FOUND if lockfile exists. Note: Rust libraries intentionally gitignore Cargo.lock — skip for Rust library projects.
+2. **deps_pinned** (file_existence) — Check for: `go.sum`, `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `uv.lock`, `poetry.lock`, `Cargo.lock`, `Pipfile.lock`, `gradle.lockfile` or `buildSrc/*.lock`, `mix.lock` (Elixir). FOUND if lockfile exists. Note: Rust libraries intentionally gitignore Cargo.lock — skip for Rust library projects. Note: Maven/Gradle projects often pin versions in POM/build files directly — check for version pinning in `pom.xml` or `build.gradle` if no lockfile.
 
 3. **vcs_cli_tools** (dependency_check) — Run `gh --version 2>/dev/null`. FOUND if gh CLI is installed.
 
-4. **single_command_setup** (doc_content) — Check README.md, AGENTS.md, CONTRIBUTING.md for a single setup command (e.g., `make setup`, `docker-compose up`, `npm install`, `./dev doctor`). FOUND if single-command setup is documented.
+4. **single_command_setup** (doc_content) — Check README.md, AGENTS.md, CONTRIBUTING.md for a single setup command (e.g., `make setup`, `task setup`, `just setup`, `earthly +setup`, `docker-compose up`, `npm install`, `nix develop`, `./dev doctor`). FOUND if single-command setup is documented.
 
 5. **fast_ci_feedback** (ci_workflow) — Read `.github/workflows/*.yml`. Check if any CI workflow completes essential checks. Estimate based on job count and step complexity. FOUND if CI appears to complete under 10 minutes.
 
 6. **deployment_frequency** (git_history) — Run `git tag --sort=-creatordate | head -20` and check dates. FOUND if multiple releases per month or regular release cadence visible.
 
-7. **release_automation** (ci_workflow) — Check for: `.github/workflows/release*`, `goreleaser.yml`, publish workflows, tag-triggered release workflows. FOUND if releases are automated via CI.
+7. **release_automation** (ci_workflow) — Check for: `.github/workflows/release*`, `goreleaser.yml`, `.releaserc` or `release.config.*` (semantic-release), `release-please-config.json` (release-please), `cargo-release` config, publish workflows, tag-triggered release workflows. FOUND if releases are automated via CI.
 
-8. **release_notes_automation** (config_parsing) — Check for: `.goreleaser.yml` with changelog, `towncrier.toml`, `.changeset/`, `git-cliff.toml`, release-changelog-builder action in CI. FOUND if release notes are auto-generated.
+8. **release_notes_automation** (config_parsing) — Check for: `.goreleaser.yml` with changelog, `towncrier.toml`, `.changeset/`, `git-cliff.toml`, `cliff.toml`, release-changelog-builder action in CI, `release-please-config.json`, `.releaserc` with changelog plugin. FOUND if release notes are auto-generated.
 
-9. **automated_pr_review** (ci_workflow + code_search) — Check for: CodeRabbit, Copilot Code Review, Danger.js, custom review bots in CI, Semgrep in PR checks. FOUND if automated review comments are generated on PRs.
+9. **automated_pr_review** (ci_workflow + code_search) — Check for: CodeRabbit, Copilot Code Review, Danger.js, custom review bots in CI, Semgrep in PR checks, CodeAnt AI, Graphite Reviewer, Sourcery, `claude-code` review in CI. FOUND if automated review comments are generated on PRs.
 
 10. **agentic_development** (file_existence + git_history) — Check for: `.claude/skills/`, `.factory/skills/`, `AGENTS.md`, `CLAUDE.md`. Also run `git log --format="%aN" -100 2>/dev/null` and check for agent co-author signatures (Claude, Copilot, factory-droid). FOUND if agent tooling directories exist or agent co-authorship visible.
 
 11. **feature_flag_infrastructure** (config_parsing + dependency_check) — Check for: LaunchDarkly, Statsig, Unleash, custom feature flag config files, `crates/feature_flags`. FOUND if feature flag system is configured.
 
-12. **build_performance_tracking** (config_parsing) — Check for: Bazel distributed cache config, turbo/nx caching, sccache, build metrics export, CI build timing. FOUND if build times are cached or tracked.
+12. **build_performance_tracking** (config_parsing) — Check for: Bazel distributed cache config, Turborepo remote cache (`turbo.json` with `remoteCache`), Nx Cloud (`nx.json` with `nxCloudAccessToken` or `nx-cloud.env`), sccache, Gradle build scans (`--scan` flag or `com.gradle.enterprise` plugin), build metrics export, CI build timing with `actions/cache`. FOUND if build times are cached or tracked.
 
 13. **unused_deps_detection** (ci_workflow + config_parsing) — Check for: `depcheck` in scripts, `go mod tidy` in CI, `cargo-udeps`, `deptry`, `knip` dependency mode. FOUND if unused deps are detected automatically.
 
-14. **monorepo_tooling** (config_parsing) — Check for: Lerna, Nx, Turborepo configs, Bazel BUILD files, Cargo workspace members, pnpm-workspace.yaml. SKIP if not a monorepo. FOUND if monorepo management tooling exists.
+14. **monorepo_tooling** (config_parsing) — Check for: Lerna, Nx (`nx.json`), Turborepo (`turbo.json`), Bazel BUILD files, Cargo workspace members, `pnpm-workspace.yaml`, Gradle multi-project builds, Earthly multi-target builds. SKIP if not a monorepo. FOUND if monorepo management tooling exists.
 
 15. **dead_feature_flag_detection** (config_parsing) — Check for: stale flag reports, flag lifecycle tooling. SKIP if no feature flag system. FOUND if dead flag detection exists.
 
@@ -111,23 +113,23 @@ Evaluate each criterion. For all config-parsing criteria, read the actual config
 
 ### Pillar 3: Testing (8 criteria)
 
-1. **unit_tests_exist** (file_existence) — Search for: `*_test.go`, `test_*.py`, `*_test.py`, `*.test.ts`, `*.test.js`, `*.spec.ts`, `*.spec.js`, `#[test]` in `*.rs`, `TEST_F` in `*.cpp`. FOUND if test files exist.
+1. **unit_tests_exist** (file_existence) — Search for: `*_test.go`, `test_*.py`, `*_test.py`, `*.test.ts`, `*.test.js`, `*.spec.ts`, `*.spec.js`, `#[test]` in `*.rs`, `TEST_F` in `*.cpp`, `src/test/` directory (Java/Kotlin), `*Test.java`, `*Spec.kt`, `*_test.exs` (Elixir). FOUND if test files exist.
 
-2. **unit_tests_runnable** (doc_content) — Check README.md, AGENTS.md, Makefile, package.json scripts for a documented test command (`go test`, `pytest`, `jest`, `cargo test`, `make test`). FOUND if test command is documented and appears runnable.
+2. **unit_tests_runnable** (doc_content) — Check README.md, AGENTS.md, Makefile, Taskfile.yml, Justfile, package.json scripts for a documented test command (`go test`, `pytest`, `jest`, `cargo test`, `make test`, `./gradlew test`, `mvn test`, `mix test`). FOUND if test command is documented and appears runnable.
 
 3. **integration_tests_exist** (file_existence) — Search for: Playwright/Cypress configs, directories named `acceptance/`, `integration/`, `e2e/`, files with `integration_test` or `acceptance_test` in name, `compiletest` for Rust. FOUND if integration/E2E tests exist.
 
-4. **test_coverage_thresholds** (config_parsing) — Check for: `codecov.yml` with targets, Jest `coverageThreshold` in config, `pytest-cov` minimum in config, coverage enforcement in CI. FOUND if minimum coverage is enforced.
+4. **test_coverage_thresholds** (config_parsing) — Check for: `codecov.yml` with targets, Jest `coverageThreshold` in config, `pytest-cov` minimum in config, JaCoCo minimum coverage rules in Gradle/Maven, coverage enforcement in CI. FOUND if minimum coverage is enforced.
 
-5. **test_naming_conventions** (code_search) — Check if test files follow language conventions: Go `*_test.go` with `TestXxx`, Python `test_*` with `test_*` functions, JS/TS `*.test.*` or `*.spec.*`. FOUND if consistent naming patterns used.
+5. **test_naming_conventions** (code_search) — Check if test files follow language conventions: Go `*_test.go` with `TestXxx`, Python `test_*` with `test_*` functions, JS/TS `*.test.*` or `*.spec.*`, Java/Kotlin `*Test.java`/`*Spec.kt` in `src/test/`, Rust `#[test]` in `mod tests`, Elixir `*_test.exs` in `test/`. FOUND if consistent naming patterns used.
 
-6. **test_isolation** (config_parsing) — Check for: `t.Parallel()` in Go tests, `pytest-xdist` workers, Jest `--workers`, `-race` flag in Go test commands, `cargo nextest`, test randomization flags. FOUND if test isolation is configured.
+6. **test_isolation** (config_parsing) — Check for: `t.Parallel()` in Go tests, `pytest-xdist` workers, Jest `--workers`, `-race` flag in Go test commands, `cargo nextest`, test randomization flags, JUnit `@Execution(CONCURRENT)`, Gradle `maxParallelForks`, Maven Surefire `forkCount`. FOUND if test isolation is configured.
 
 7. **flaky_test_detection** (config_parsing + ci_workflow) — Check for: `pytest-rerunfailures`, `--stress` flag, retry-on-failure config, flaky test dashboard, quarantine mechanisms. FOUND if flaky tests are detected or quarantined.
 
 8. **test_performance_tracking** (config_parsing) — Check for: `--durations` flags in test commands, CI timing reports, `gotestsum` timing, test analytics. FOUND if test execution times are monitored.
 
-### Pillar 4: Documentation (8 criteria)
+### Pillar 4: Documentation (10 criteria)
 
 1. **readme** (file_existence + doc_content) — Check for README.md at root. Verify it has meaningful content (setup instructions, description, usage). FOUND if comprehensive README exists.
 
@@ -145,21 +147,25 @@ Evaluate each criterion. For all config-parsing criteria, read the actual config
 
 8. **skills** (file_existence) — Check for: `.claude/skills/` or `.factory/skills/` directories with skill definitions. FOUND if reusable agent skill definitions exist.
 
+9. **changelog_maintained** (file_existence + doc_content) — Check for: `CHANGELOG.md` or `CHANGES.md` at root with structured entries (dates, version headers, categorized changes following Keep a Changelog or similar format). FOUND if a maintained changelog exists. This is distinct from `release_notes_automation` which checks for automated generation.
+
+10. **doc_examples_tested** (config_parsing + code_search) — Check for: Python `doctest` in test config or `--doctest-modules` flag, Go testable examples (`func Example` in `*_test.go`), JSDoc `@example` tags validated by a test runner, Rust doc-tests (`///` examples compiled by `cargo test`). SKIP if project has no public API or library surface. FOUND if documentation code examples are verified by the test suite.
+
 ### Pillar 5: Development Environment (5 criteria)
 
-1. **devcontainer** (file_existence) — Check for: `.devcontainer/devcontainer.json` or `.devcontainer.json`. FOUND if devcontainer config exists.
+1. **devcontainer** (file_existence) — Check for: `.devcontainer/devcontainer.json`, `.devcontainer.json`, `flake.nix` with devShell output, `shell.nix`, or `default.nix` with development dependencies. FOUND if devcontainer or Nix-based reproducible development environment config exists.
 
-2. **devcontainer_runnable** (config_parsing) — If devcontainer exists, check if it has a valid base image and features configured. SKIP if no devcontainer. FOUND if devcontainer appears buildable.
+2. **devcontainer_runnable** (config_parsing) — If devcontainer or Nix dev environment exists, check if it has a valid base image and features configured (devcontainer) or valid inputs and devShell output (Nix flake). SKIP if no devcontainer or Nix config. FOUND if dev environment appears buildable.
 
-3. **env_template** (file_existence) — Check for: `.env.example`, `.env.template`, `.envrc.example`, documented env vars in docs. FOUND if env template exists.
+3. **env_template** (file_existence) — Check for: `.env.example`, `.env.template`, `.envrc.example`, documented env vars in docs, `.tool-versions` (asdf), `.mise.toml` or `.mise/config.toml` (mise), `.nvmrc`, `.node-version`, `.python-version`, `.ruby-version`, `.go-version`. FOUND if env template or tool version pinning exists.
 
 4. **local_services_setup** (file_existence) — Check for: `docker-compose.yml` or `compose.yml` with service definitions (Postgres, Redis, etc.). FOUND if local services are containerized.
 
-5. **database_schema** (file_existence) — Check for: migration files (Alembic, Prisma, ActiveRecord, Flyway, Goose), `schema.prisma`, `schema.sql`, SQLAlchemy models. SKIP if project has no database. FOUND if schema management exists.
+5. **database_schema** (file_existence) — Check for: migration files (Alembic, Prisma, ActiveRecord, Flyway, Goose, Liquibase), `schema.prisma`, `schema.sql`, SQLAlchemy models, JPA/Hibernate entity classes, Ecto migrations (Elixir), sea-orm entities. SKIP if project has no database. FOUND if schema management exists.
 
 ### Pillar 6: Debugging & Observability (11 criteria)
 
-1. **structured_logging** (dependency_check) — Check dependency manifests and imports for: `zap`, `logrus`, `zerolog` (Go), `structlog`, `logging` with formatters (Python), `winston`, `pino` (Node.js), `tracing` crate (Rust). FOUND if structured logging library is used.
+1. **structured_logging** (dependency_check) — Check dependency manifests and imports for: `zap`, `logrus`, `zerolog` (Go), `structlog`, `logging` with formatters (Python), `winston`, `pino` (Node.js), `tracing` crate (Rust), `logback` with JSON encoder, `log4j2` with JSON layout, `slf4j` (Java/Kotlin), `Logger` (Elixir). FOUND if structured logging library is used.
 
 2. **distributed_tracing** (dependency_check) — Check for: OpenTelemetry packages, `opentracing`, Jaeger client, `X-Request-ID` middleware, `dd-trace`. FOUND if distributed tracing is instrumented.
 
@@ -181,7 +187,7 @@ Evaluate each criterion. For all config-parsing criteria, read the actual config
 
 11. **runbooks_documented** (file_existence) — Check for: `runbooks/` directory, `INCIDENT_RESPONSE.md`, `PLAYBOOK.md`, operational docs with incident procedures. FOUND if runbooks exist.
 
-### Pillar 7: Security & Governance (11 criteria)
+### Pillar 7: Security & Governance (13 criteria)
 
 1. **branch_protection** (api_check) — Run `gh api repos/{owner}/{repo}/rulesets 2>/dev/null` or `gh api repos/{owner}/{repo}/branches/main/protection 2>/dev/null`. SKIP if gh unavailable. FOUND if branch protection rules exist.
 
@@ -204,6 +210,10 @@ Evaluate each criterion. For all config-parsing criteria, read the actual config
 10. **dast_scanning** (ci_workflow) — Check for: OWASP ZAP, Burp Suite, Nuclei in CI workflows, dynamic scanning steps. SKIP if project is a library/CLI. FOUND if DAST runs in CI.
 
 11. **privacy_compliance** (config_parsing) — Check for: data retention policies, consent management, privacy tooling, GDPR/CCPA controls. SKIP if project doesn't collect user data. FOUND if privacy compliance is enforced.
+
+12. **container_image_scanning** (ci_workflow) — Check for: Trivy, Snyk Container, Grype, or Anchore in CI workflows scanning Docker/OCI images for vulnerabilities. Also check for `docker scout` or `cosign` usage. SKIP if project does not build container images (no `Dockerfile`, `Containerfile`, or container build step in CI). FOUND if container image vulnerability scanning runs in CI.
+
+13. **sbom_generation** (ci_workflow + config_parsing) — Check for: `syft`, `cyclonedx-bom`, `spdx-sbom-generator`, `trivy sbom`, or `docker sbom` in CI workflows or build scripts. Also check for SBOM output files (`.spdx.json`, `.cdx.json`, `bom.json`). SKIP if project does not produce distributable artifacts. FOUND if Software Bill of Materials is generated as part of the build or release pipeline.
 
 ### Pillar 8: Task Discovery (4 criteria)
 
@@ -247,9 +257,9 @@ Each criterion is assigned to a maturity level (L1-L5). Calculate completion per
 
 **Level 1 (Functional):** formatter, lint_config, type_check, strict_typing, unit_tests_exist, unit_tests_runnable, test_naming_conventions, readme, documentation_freshness, build_cmd_doc, deps_pinned, vcs_cli_tools, gitignore_comprehensive
 
-**Level 2 (Documented):** pre_commit_hooks, naming_consistency, agents_md, skills, devcontainer, env_template, local_services_setup, database_schema, single_command_setup, branch_protection, codeowners, secrets_management, issue_templates, pr_templates, structured_logging
+**Level 2 (Documented):** pre_commit_hooks, naming_consistency, agents_md, skills, devcontainer, env_template, local_services_setup, database_schema, single_command_setup, branch_protection, codeowners, secrets_management, issue_templates, pr_templates, structured_logging, changelog_maintained
 
-**Level 3 (Standardized):** large_file_detection, code_modularization, cyclomatic_complexity, dead_code_detection, duplicate_code_detection, tech_debt_tracking, integration_tests_exist, test_coverage_thresholds, test_isolation, agents_md_validation, automated_doc_generation, api_schema_docs, service_flow_documented, distributed_tracing, metrics_collection, health_checks, code_quality_metrics, secret_scanning, dependency_update_automation, automated_security_review, log_scrubbing, issue_labeling_system, backlog_health, fast_ci_feedback, release_automation, release_notes_automation, unused_deps_detection
+**Level 3 (Standardized):** large_file_detection, code_modularization, cyclomatic_complexity, dead_code_detection, duplicate_code_detection, tech_debt_tracking, integration_tests_exist, test_coverage_thresholds, test_isolation, agents_md_validation, automated_doc_generation, api_schema_docs, service_flow_documented, doc_examples_tested, distributed_tracing, metrics_collection, health_checks, code_quality_metrics, secret_scanning, dependency_update_automation, automated_security_review, log_scrubbing, container_image_scanning, sbom_generation, issue_labeling_system, backlog_health, fast_ci_feedback, release_automation, release_notes_automation, unused_deps_detection
 
 **Level 4 (Optimized):** n_plus_one_detection, deployment_frequency, automated_pr_review, agentic_development, feature_flag_infrastructure, build_performance_tracking, monorepo_tooling, flaky_test_detection, test_performance_tracking, devcontainer_runnable, alerting_configured, deployment_observability, error_tracking_contextualized, profiling_instrumentation, circuit_breakers, runbooks_documented, pii_handling
 
