@@ -257,6 +257,8 @@ Each criterion is assigned to a maturity level (L1-L5). Calculate completion per
 
 **Gated progression rule:** To unlock level N, the repository must pass ≥80% of applicable criteria at level N AND all previous levels. Calculate each level's completion percentage (excluding skipped criteria). The maturity level is the highest level where the 80% gate is met for that level and all levels below it.
 
+**Level bar weights:** For the progress bar, calculate each level's visual width proportional to its applicable criteria count: `{lN_weight} = round(applicable_criteria_at_level_N / total_applicable_criteria * 100)`. Ensure the 5 weights sum to 100 (adjust the largest to absorb rounding).
+
 ### Strengths and Opportunities
 
 **Strengths (top 3):** Select the 3 pillars with the highest percentage scores. For each, list the pillar name with percentage and 2-3 key passing criteria as evidence.
@@ -327,7 +329,7 @@ The HTML report MUST use this structure with inline CSS. Replace all `{placehold
   }
   .description {
     font-size: 0.9rem;
-    color: #666;
+    color: #999;
     margin-bottom: 24px;
   }
 
@@ -358,9 +360,9 @@ The HTML report MUST use this structure with inline CSS. Replace all `{placehold
   .level-label .pct { color: #ccc; }
   .level-label .name { color: #888; }
 
-  .l1 { background: #2d8a4e; }
+  .l1 { background: #1a6b3a; }
   .l2 { background: #2d8a4e; }
-  .l3 { background: #2d8a4e; }
+  .l3 { background: #40a862; }
   .l4 { background: #d4a017; }
   .l5 { background: #333; }
 
@@ -390,9 +392,10 @@ The HTML report MUST use this structure with inline CSS. Replace all `{placehold
   }
   .col-header {
     font-size: 0.7rem;
+    font-weight: 400;
     letter-spacing: 2px;
     text-transform: uppercase;
-    color: #666;
+    color: #999;
     margin-bottom: 20px;
   }
   .highlight {
@@ -403,7 +406,7 @@ The HTML report MUST use this structure with inline CSS. Replace all `{placehold
     font-weight: 700;
     margin-bottom: 4px;
   }
-  .highlight-num.green { color: #e85d3a; }
+  .highlight-num.green { color: #4caf50; }
   .highlight-num.orange { color: #d4a017; }
   .highlight-title {
     font-size: 1rem;
@@ -427,7 +430,7 @@ The HTML report MUST use this structure with inline CSS. Replace all `{placehold
     font-size: 0.7rem;
     letter-spacing: 2px;
     text-transform: uppercase;
-    color: #666;
+    color: #999;
     margin-bottom: 24px;
   }
   .pillar-group { margin-bottom: 32px; }
@@ -446,7 +449,7 @@ The HTML report MUST use this structure with inline CSS. Replace all `{placehold
   }
   .pillar-score {
     font-size: 0.85rem;
-    color: #888;
+    color: #999;
     font-family: monospace;
   }
   .criterion-row {
@@ -471,83 +474,101 @@ The HTML report MUST use this structure with inline CSS. Replace all `{placehold
     text-align: center;
   }
   .criterion-evidence {
-    color: #777;
+    color: #999;
     line-height: 1.4;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+
+  @media (max-width: 768px) {
+    body { padding: 20px 16px; }
+    h1 { font-size: 2rem; }
+    .columns { grid-template-columns: 1fr; gap: 32px; }
+    .criterion-row {
+      grid-template-columns: 24px 1fr;
+      gap: 8px;
+    }
+    .criterion-score { text-align: left; }
+    .criterion-evidence { grid-column: 1 / -1; padding-left: 32px; }
+    .level-labels { font-size: 0.65rem; }
   }
 </style>
 </head>
 <body>
 
-<!-- HEADER -->
-<h1>{project_name} <span class="badge">{language}</span></h1>
-<p class="meta">{repo_path}&nbsp;&nbsp;&nbsp;PASS RATE {pass_rate}%</p>
-<p class="description">{project_description}</p>
+<header>
+  <h1>{project_name} <span class="badge">{language}</span></h1>
+  <p class="meta">{repo_path}&nbsp;&nbsp;&nbsp;PASS RATE {pass_rate}%</p>
+  <p class="description">{project_description}</p>
+</header>
 
-<!-- LEVEL PROGRESS BAR -->
-<div class="level-bar">
-  <div class="level-segment l1" style="width:20%"></div>
-  <div class="level-segment l2" style="width:20%"></div>
-  <div class="level-segment l3" style="width:20%"></div>
-  <div class="level-segment l4" style="width:20%"></div>
-  <div class="level-segment l5" style="width:20%"></div>
-</div>
-<div class="level-labels">
-  <div class="level-label" style="width:20%"><span class="pct">{l1_pct}%</span>&nbsp;<span class="name">L1</span></div>
-  <div class="level-label" style="width:20%"><span class="pct">{l2_pct}%</span>&nbsp;<span class="name">L2</span></div>
-  <div class="level-label" style="width:20%"><span class="pct">{l3_pct}%</span>&nbsp;<span class="name">L3</span></div>
-  <div class="level-label" style="width:20%"><span class="pct">{l4_pct}%</span>&nbsp;<span class="name">L4</span></div>
-  <div class="level-label" style="width:20%"><span class="pct">{l5_pct}%</span>&nbsp;<span class="name">L5</span></div>
-</div>
-
-<!-- SUMMARY -->
-<div class="summary-section">
-  <h2>{summary_headline}</h2>
-  <p>{summary_text}</p>
-
-  <div class="columns">
-    <div>
-      <div class="col-header">STRENGTHS</div>
-      <!-- Repeat for each strength (top 3) -->
-      <div class="highlight">
-        <div class="highlight-num green">01</div>
-        <div class="highlight-title">{strength_1_title}</div>
-        <div class="highlight-detail">{strength_1_detail}</div>
-      </div>
-      <!-- 02, 03 ... -->
-    </div>
-    <div>
-      <div class="col-header">OPPORTUNITIES</div>
-      <!-- Repeat for each opportunity (top 3) -->
-      <div class="highlight">
-        <div class="highlight-num orange">01</div>
-        <div class="highlight-title">{opportunity_1_title}</div>
-        <div class="highlight-detail">{opportunity_1_detail}</div>
-      </div>
-      <!-- 02, 03 ... -->
-    </div>
+<main>
+  <!-- LEVEL PROGRESS BAR -->
+  <div class="level-bar" role="progressbar" aria-valuenow="{maturity_level}" aria-valuemin="1" aria-valuemax="5" aria-label="Maturity level {maturity_level} of 5">
+    <div class="level-segment l1" style="width:{l1_weight}%"></div>
+    <div class="level-segment l2" style="width:{l2_weight}%"></div>
+    <div class="level-segment l3" style="width:{l3_weight}%"></div>
+    <div class="level-segment l4" style="width:{l4_weight}%"></div>
+    <div class="level-segment l5" style="width:{l5_weight}%"></div>
   </div>
-</div>
-
-<!-- ALL CRITERIA -->
-<div class="criteria-section">
-  <div class="criteria-header">ALL CRITERIA</div>
-
-  <!-- Repeat for each pillar (9 total) -->
-  <div class="pillar-group">
-    <div class="pillar-header">
-      <span class="pillar-name">{pillar_name}</span>
-      <span class="pillar-score">{passed}/{total} ({percentage}%)</span>
-    </div>
-
-    <!-- Repeat for each criterion in this pillar, alphabetically by name -->
-    <div class="criterion-row">
-      <span class="status-icon {pass|fail|skip}">{✓|✗|—}</span>
-      <span class="criterion-name">{criterion_name}</span>
-      <span class="criterion-score">{1/1|0/1|—/—}</span>
-      <span class="criterion-evidence">{evidence_text}</span>
-    </div>
+  <div class="level-labels" aria-hidden="true">
+    <div class="level-label" style="width:{l1_weight}%"><span class="pct">{l1_pct}%</span>&nbsp;<span class="name">L1</span></div>
+    <div class="level-label" style="width:{l2_weight}%"><span class="pct">{l2_pct}%</span>&nbsp;<span class="name">L2</span></div>
+    <div class="level-label" style="width:{l3_weight}%"><span class="pct">{l3_pct}%</span>&nbsp;<span class="name">L3</span></div>
+    <div class="level-label" style="width:{l4_weight}%"><span class="pct">{l4_pct}%</span>&nbsp;<span class="name">L4</span></div>
+    <div class="level-label" style="width:{l5_weight}%"><span class="pct">{l5_pct}%</span>&nbsp;<span class="name">L5</span></div>
   </div>
-</div>
+
+  <!-- SUMMARY -->
+  <section class="summary-section">
+    <h2>{summary_headline}</h2>
+    <p>{summary_text}</p>
+
+    <div class="columns">
+      <div>
+        <h3 class="col-header">STRENGTHS</h3>
+        <!-- Repeat for each strength (top 3) -->
+        <article class="highlight">
+          <div class="highlight-num green">01</div>
+          <div class="highlight-title">{strength_1_title}</div>
+          <div class="highlight-detail">{strength_1_detail}</div>
+        </article>
+        <!-- 02, 03 ... -->
+      </div>
+      <div>
+        <h3 class="col-header">OPPORTUNITIES</h3>
+        <!-- Repeat for each opportunity (top 3) -->
+        <article class="highlight">
+          <div class="highlight-num orange">01</div>
+          <div class="highlight-title">{opportunity_1_title}</div>
+          <div class="highlight-detail">{opportunity_1_detail}</div>
+        </article>
+        <!-- 02, 03 ... -->
+      </div>
+    </div>
+  </section>
+
+  <!-- ALL CRITERIA -->
+  <section class="criteria-section">
+    <h2 class="criteria-header">ALL CRITERIA</h2>
+
+    <!-- Repeat for each pillar (9 total) -->
+    <section class="pillar-group">
+      <div class="pillar-header">
+        <span class="pillar-name">{pillar_name}</span>
+        <span class="pillar-score">{passed}/{total} ({percentage}%)</span>
+      </div>
+
+      <!-- Repeat for each criterion in this pillar, alphabetically by name -->
+      <div class="criterion-row">
+        <span class="status-icon {pass|fail|skip}" aria-label="{pass: Passed|fail: Failed|skip: Skipped}">{✓|✗|—}</span>
+        <span class="criterion-name">{criterion_name}</span>
+        <span class="criterion-score">{1/1|0/1|—/—}</span>
+        <span class="criterion-evidence">{evidence_text}</span>
+      </div>
+    </section>
+  </section>
+</main>
 
 </body>
 </html>
