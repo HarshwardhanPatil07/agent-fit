@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>sample-project — Agent Fit Report</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0d0d1a;
+    color: #e0e0e0;
+    padding: 40px 60px;
+    line-height: 1.6;
+  }
+  h1 { font-size: 3rem; font-weight: 300; margin-bottom: 4px; color: #ffffff; }
+  .badge {
+    display: inline-block; font-size: 0.8rem; font-weight: 600;
+    padding: 2px 10px; border: 1px solid #888; border-radius: 12px;
+    vertical-align: middle; margin-left: 12px; color: #ccc; text-transform: uppercase;
+  }
+  .meta { font-family: monospace; font-size: 0.85rem; color: #888; margin-bottom: 4px; }
+  .description { font-size: 0.9rem; color: #999; margin-bottom: 24px; }
+  .level-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin-bottom: 8px; background: #1a1a2e; }
+  .level-segment { height: 100%; }
+  .level-labels { display: flex; margin-bottom: 40px; font-size: 0.75rem; font-family: monospace; }
+  .level-label { display: flex; align-items: center; gap: 4px; }
+  .level-label .pct { color: #ccc; }
+  .level-label .name { color: #888; }
+  .l1 { background: #1a6b3a; }
+  .l2 { background: #2d8a4e; }
+  .l3 { background: #40a862; }
+  .l4 { background: #d4a017; }
+  .l5 { background: #333; }
+  .summary-section { margin-bottom: 48px; }
+  .summary-section h2 { font-size: 1.8rem; font-weight: 600; color: #ffffff; margin-bottom: 16px; margin-top: 40px; }
+  .summary-section p { font-family: monospace; font-size: 0.85rem; color: #999; max-width: 700px; line-height: 1.7; margin-bottom: 32px; }
+  .columns { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; }
+  .col-header { font-size: 0.7rem; letter-spacing: 2px; text-transform: uppercase; color: #999; margin-bottom: 20px; }
+  .highlight { margin-bottom: 20px; }
+  .highlight-num { font-size: 0.85rem; font-weight: 700; margin-bottom: 4px; }
+  .highlight-num.green { color: #4caf50; }
+  .highlight-num.orange { color: #d4a017; }
+  .highlight-title { font-size: 1rem; font-weight: 600; color: #ffffff; margin-bottom: 4px; }
+  .highlight-detail { font-size: 0.8rem; color: #888; line-height: 1.5; }
+  .criteria-section { margin-top: 48px; border-top: 1px solid #1a1a2e; padding-top: 32px; }
+  .criteria-header { font-size: 0.7rem; letter-spacing: 2px; text-transform: uppercase; color: #999; margin-bottom: 24px; }
+  .pillar-group { margin-bottom: 32px; }
+  .pillar-header { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #1a1a2e; margin-bottom: 8px; }
+  .pillar-name { font-size: 0.95rem; font-weight: 600; color: #ffffff; }
+  .pillar-score { font-size: 0.85rem; color: #888; font-family: monospace; }
+  .criterion-row { display: grid; grid-template-columns: 24px 200px 50px 1fr; gap: 16px; padding: 6px 0; align-items: baseline; font-size: 0.8rem; }
+  .status-icon { text-align: center; }
+  .status-icon.pass { color: #4caf50; }
+  .status-icon.fail { color: #e85d3a; }
+  .status-icon.skip { color: #555; }
+  .criterion-name { font-family: monospace; color: #ccc; }
+  .criterion-score { font-family: monospace; color: #888; text-align: center; }
+  .criterion-evidence { color: #999; line-height: 1.4; word-wrap: break-word; overflow-wrap: break-word; }
+  .custom-badge { font-size: 0.6rem; background: #2d2d4e; color: #8888cc; padding: 1px 6px; border-radius: 8px; margin-left: 8px; vertical-align: middle; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<h1>sample-project <span class="badge">TypeScript</span><span class="badge">Web App</span></h1>
+<p class="meta">github/sample-project&nbsp;&nbsp;&nbsp;PASS RATE 67%&nbsp;&nbsp;&nbsp;WEIGHTED 72%</p>
+<p class="description">A sample project demonstrating the Agent-Fit v2 report format</p>
+
+<!-- LEVEL PROGRESS BAR -->
+<div class="level-bar">
+  <div class="level-segment l1" style="width:16%"></div>
+  <div class="level-segment l2" style="width:18%"></div>
+  <div class="level-segment l3" style="width:33%"></div>
+  <div class="level-segment l4" style="width:21%"></div>
+  <div class="level-segment l5" style="width:12%"></div>
+</div>
+<div class="level-labels">
+  <div class="level-label" style="width:16%"><span class="pct">92%</span>&nbsp;<span class="name">L1</span></div>
+  <div class="level-label" style="width:18%"><span class="pct">73%</span>&nbsp;<span class="name">L2</span></div>
+  <div class="level-label" style="width:33%"><span class="pct">56%</span>&nbsp;<span class="name">L3</span></div>
+  <div class="level-label" style="width:21%"><span class="pct">35%</span>&nbsp;<span class="name">L4</span></div>
+  <div class="level-label" style="width:12%"><span class="pct">10%</span>&nbsp;<span class="name">L5</span></div>
+</div>
+
+<!-- SUMMARY -->
+<div class="summary-section">
+  <h2>Strong Testing</h2>
+  <p>sample-project reaches Level 2 with 67% pass rate (Weighted: 72%). Currently at Documented grade with 50/75 criteria passing. Key areas for improvement include the opportunities listed below.</p>
+
+  <div class="columns">
+    <div>
+      <div class="col-header">STRENGTHS</div>
+      <div class="highlight">
+        <div class="highlight-num green">01</div>
+        <div class="highlight-title">Testing (100%)</div>
+        <div class="highlight-detail">Unit tests, integration tests, coverage thresholds all configured</div>
+      </div>
+      <div class="highlight">
+        <div class="highlight-num green">02</div>
+        <div class="highlight-title">Style & Validation (85%)</div>
+        <div class="highlight-detail">ESLint, Prettier, TypeScript strict mode, pre-commit hooks</div>
+      </div>
+      <div class="highlight">
+        <div class="highlight-num green">03</div>
+        <div class="highlight-title">Documentation (75%)</div>
+        <div class="highlight-detail">README, CLAUDE.md, API schema documented</div>
+      </div>
+    </div>
+    <div>
+      <div class="col-header">OPPORTUNITIES</div>
+      <div class="highlight">
+        <div class="highlight-num orange">01</div>
+        <div class="highlight-title">devcontainer</div>
+        <div class="highlight-detail">Add .devcontainer/devcontainer.json for consistent dev environments</div>
+      </div>
+      <div class="highlight">
+        <div class="highlight-num orange">02</div>
+        <div class="highlight-title">dependency_update_automation</div>
+        <div class="highlight-detail">Add dependabot.yml or renovate.json to automate dependency updates</div>
+      </div>
+      <div class="highlight">
+        <div class="highlight-num orange">03</div>
+        <div class="highlight-title">distributed_tracing</div>
+        <div class="highlight-detail">Add OpenTelemetry tracing for request observability</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ALL CRITERIA (abbreviated for sample) -->
+<div class="criteria-section">
+  <div class="criteria-header">ALL CRITERIA</div>
+
+  <div class="pillar-group">
+    <div class="pillar-header">
+      <span class="pillar-name">Style & Validation</span>
+      <span class="pillar-score">11/13 (85%)</span>
+    </div>
+    <div class="criterion-row">
+      <span class="status-icon pass">&#10003;</span>
+      <span class="criterion-name">formatter</span>
+      <span class="criterion-score">1/1</span>
+      <span class="criterion-evidence">Prettier configured in .prettierrc with 47 rules</span>
+    </div>
+    <div class="criterion-row">
+      <span class="status-icon pass">&#10003;</span>
+      <span class="criterion-name">lint_config</span>
+      <span class="criterion-score">1/1</span>
+      <span class="criterion-evidence">ESLint configured in eslint.config.mjs with TypeScript plugin</span>
+    </div>
+    <div class="criterion-row">
+      <span class="status-icon fail">&#10007;</span>
+      <span class="criterion-name">duplicate_code_detection</span>
+      <span class="criterion-score">0/1</span>
+      <span class="criterion-evidence">No jscpd, PMD CPD, or SonarQube duplication scanner found</span>
+    </div>
+    <div class="criterion-row">
+      <span class="status-icon pass">&#10003;</span>
+      <span class="criterion-name">internal_api_docs<span class="custom-badge">Custom</span></span>
+      <span class="criterion-score">1/1</span>
+      <span class="criterion-evidence">Found 3 files in docs/api/ directory</span>
+    </div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer style="margin-top: 64px; padding-top: 24px; border-top: 1px solid #1a1a2e; font-size: 0.75rem; color: #555; font-family: monospace;">
+  Agent-Fit v2.0.0 &middot; Assessed 2026-05-13T14:30:00Z &middot; abc123d &middot; 75 criteria evaluated &middot; 3 skipped &middot; Web App
+</footer>
+
+</body>
+</html>

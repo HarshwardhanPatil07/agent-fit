@@ -1,7 +1,7 @@
 {
   "name": "agentfit",
   "description": "Evaluates codebase agent-readiness across 9 pillars, 75+ criteria, and 5 maturity levels — produces an HTML report with pass rate scoring",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "author": {
     "name": "HarshwardhanPatil07"
   }

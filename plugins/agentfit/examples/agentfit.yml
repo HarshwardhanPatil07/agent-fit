@@ -1,0 +1,21 @@
+# .agentfit.yml — Agent-Fit custom configuration
+# Place this file at your repository root to customize the assessment.
+# All fields are optional. An empty or missing file uses defaults.
+
+custom_criteria:
+  - name: "internal_api_docs"
+    pillar: "Documentation"
+    level: "L2"
+    check: "docs/api/ directory with endpoint documentation"
+    found_when: "docs/api/ contains at least one .md or .yaml file"
+
+  - name: "staging_environment"
+    pillar: "Development Environment"
+    level: "L3"
+    check: "Staging environment configuration exists"
+    found_when: "docker-compose.staging.yml or staging/ directory found"
+    impact_tier: "high"
+
+disabled_criteria:
+  - "product_analytics_instrumentation"
+  - "experiment_infrastructure"

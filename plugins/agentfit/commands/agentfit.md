@@ -19,6 +19,21 @@ When invoked, perform the following assessment. This is a READ-ONLY analysis —
 3. Extract project name: use the current directory name.
 4. Extract repo path: run `git remote get-url origin 2>/dev/null` and parse `org/repo` from the URL. If no git remote, use the directory path.
 5. Get a short project description from README.md first line/paragraph if available.
+6. The skill version is `2.0.0`. Store as `skill_version` for use in the report footer and JSON output.
+7. Get the git SHA: run `git rev-parse --short HEAD 2>/dev/null`. Store as `git_sha`.
+8. Detect project type(s). A project can match multiple types. Check all of the following and record every match:
+   - **library**: `package.json` with no `bin` field and no server framework (`express`, `fastify`, `koa`, `hapi`, `next`, `nuxt`) in dependencies; OR `pyproject.toml`/`setup.py` with no CLI `[project.scripts]` entry_points and no web framework; OR Go project with no `main.go` or with only exported packages; OR Rust project with `[lib]` in Cargo.toml and no `[[bin]]`
+   - **cli**: `package.json` with `bin` field; OR `pyproject.toml` with `[project.scripts]`; OR `main.go` with `cobra`, `urfave/cli`, or `flag` imports; OR Cargo.toml with `[[bin]]` and no HTTP framework
+   - **web_app**: HTTP framework in dependencies (`react`, `next`, `vue`, `nuxt`, `angular`, `svelte`, `flask`, `django`, `rails`) AND presence of frontend assets (`public/`, `static/`, `templates/`, HTML/CSS source files)
+   - **api_service**: HTTP framework in dependencies (`fastapi`, `gin`, `echo`, `express`, `actix-web`, `axum`, `flask`, `django-rest-framework`) WITHOUT frontend assets (no `public/`, `static/`, `templates/` with HTML)
+   - **monorepo**: `pnpm-workspace.yaml`, `lerna.json`, `nx.json`, `turbo.json`, Cargo workspace `[workspace]` in Cargo.toml, or multiple `go.mod` files
+   - If no type matches, default to `web_app` (most permissive — evaluates all criteria)
+   - Record detection evidence for each matched type (e.g., "Found `bin` field in package.json")
+9. Read `.agentfit.yml` from the repo root (if it exists):
+   - Parse the YAML file. If parsing fails (invalid YAML), warn: "Invalid .agentfit.yml — skipping custom criteria" and proceed with defaults.
+   - Extract `custom_criteria` list (if present). For each entry, validate: `name` must be snake_case and unique, `pillar` must match one of the 9 pillar names, `level` must be L1-L5. Skip invalid entries with a warning.
+   - Extract `disabled_criteria` list (if present). These criterion names will be fully removed from the assessment.
+   - `.agentfit.yml` overrides the project-type applicability matrix in BOTH directions: `disabled_criteria` can force-remove criteria the matrix would evaluate; custom criteria are always evaluated regardless of project type.
 
 ## Step 2: Evaluate All Criteria
 
@@ -29,15 +44,31 @@ Evaluate each criterion below using the specified signal type. For each criterio
 
 ### Criteria Skip Rules
 
-Skip a criterion (mark as `—/—`) when:
-- It requires `gh` CLI but `gh auth status` fails or `gh` is not installed
-- It checks for database tooling but the project has no database
-- It checks for deployment/server tooling but the project is a library
-- It checks for N+1 queries but the project doesn't use an ORM
-- It checks for PII/privacy but the project doesn't handle user data
-- It checks for DAST but the project is a CLI tool or library
+**Project-Type Applicability Matrix**: Skip a criterion (mark as `—/—`) based on the detected project type(s). When multiple types are detected, skip a criterion ONLY if ALL detected types would skip it (union approach).
 
-When skipping, always explain why in the evidence field.
+| Criterion | Library | CLI | Web App | API Service | Monorepo |
+|-----------|---------|-----|---------|-------------|----------|
+| deployment_frequency | SKIP | — | — | — | — |
+| progressive_rollout | SKIP | — | — | — | — |
+| rollback_automation | SKIP | — | — | — | — |
+| health_checks | SKIP | SKIP | — | — | — |
+| product_analytics_instrumentation | SKIP | SKIP | — | SKIP | — |
+| local_services_setup | SKIP | — | — | — | — |
+| dast_scanning | SKIP | SKIP | — | — | — |
+| distributed_tracing | — | SKIP | — | — | — |
+| deployment_observability | — | SKIP | — | — | — |
+| heavy_dependency_detection | — | — | — | SKIP | — |
+| n_plus_one_detection | SKIP | SKIP | — | — | — |
+
+`—` means the criterion is evaluated (not skipped) for that project type.
+
+**Additional skip rules** (apply regardless of project type):
+- Skip if the criterion requires `gh` CLI but `gh auth status` fails or `gh` is not installed
+- Skip if the criterion checks for database tooling but the project has no database (no migration files, no ORM, no schema files)
+
+**`.agentfit.yml` overrides**: If a criterion appears in `disabled_criteria`, remove it entirely (do not show as skipped — remove from the criteria list and total count). This overrides the matrix in both directions.
+
+When skipping, always explain why in the evidence field (e.g., "Skipped — CLI project", "Skipped — gh CLI not available").
 
 ### Pillar 1: Style & Validation (13 criteria)
 
@@ -67,7 +98,7 @@ Evaluate each criterion. For all config-parsing criteria, read the actual config
 
 12. **tech_debt_tracking** (ci_workflow) — Check for: CI workflows scanning for TODO/FIXME markers, `godox` linter in golangci-lint, SonarQube, `check-todos` scripts. FOUND if tech debt tracking is automated.
 
-13. **n_plus_one_detection** (config_parsing) — Check for: `bullet` gem (Ruby), `django-auto-prefetch` or `nplusone` (Python), Prisma query warnings, ORM query analyzers. SKIP if project doesn't use an ORM or database. FOUND if N+1 detection is configured.
+13. **n_plus_one_detection** (config_parsing) — Check for: `bullet` gem (Ruby), `django-auto-prefetch` or `nplusone` (Python), Prisma query warnings, ORM query analyzers. Check applicability matrix for skip. FOUND if N+1 detection is configured.
 
 ### Pillar 2: Build System (19 criteria)
 
@@ -97,17 +128,17 @@ Evaluate each criterion. For all config-parsing criteria, read the actual config
 
 13. **unused_deps_detection** (ci_workflow + config_parsing) — Check for: `depcheck` in scripts, `go mod tidy` in CI, `cargo-udeps`, `deptry`, `knip` dependency mode. FOUND if unused deps are detected automatically.
 
-14. **monorepo_tooling** (config_parsing) — Check for: Lerna, Nx, Turborepo configs, Bazel BUILD files, Cargo workspace members, pnpm-workspace.yaml. SKIP if not a monorepo. FOUND if monorepo management tooling exists.
+14. **monorepo_tooling** (config_parsing) — Check for: Lerna, Nx, Turborepo configs, Bazel BUILD files, Cargo workspace members, pnpm-workspace.yaml. FOUND if monorepo management tooling exists.
 
 15. **dead_feature_flag_detection** (config_parsing) — Check for: stale flag reports, flag lifecycle tooling. SKIP if no feature flag system. FOUND if dead flag detection exists.
 
-16. **heavy_dependency_detection** (config_parsing) — Check for: `bundlewatch`, `size-limit`, `webpack-bundle-analyzer` configs. SKIP if not a frontend/bundled project. FOUND if bundle size monitoring exists.
+16. **heavy_dependency_detection** (config_parsing) — Check for: `bundlewatch`, `size-limit`, `webpack-bundle-analyzer` configs. Check applicability matrix for skip. FOUND if bundle size monitoring exists.
 
 17. **progressive_rollout** (config_parsing) — Check for: canary deploy config, percentage-based rollout, blue-green deployment setup. FOUND if progressive rollout is configured.
 
 18. **rollback_automation** (config_parsing + ci_workflow) — Check for: automated rollback on error rate, one-click rollback config, deployment rollback scripts. FOUND if automated rollback exists.
 
-19. **version_drift_detection** (config_parsing) — Check for: `syncpack`, `manypkg`, version consistency checks in monorepo. SKIP if not a monorepo. FOUND if version drift detection exists.
+19. **version_drift_detection** (config_parsing) — Check for: `syncpack`, `manypkg`, version consistency checks in monorepo. FOUND if version drift detection exists.
 
 ### Pillar 3: Testing (8 criteria)
 
@@ -149,13 +180,13 @@ Evaluate each criterion. For all config-parsing criteria, read the actual config
 
 1. **devcontainer** (file_existence) — Check for: `.devcontainer/devcontainer.json` or `.devcontainer.json`. FOUND if devcontainer config exists.
 
-2. **devcontainer_runnable** (config_parsing) — If devcontainer exists, check if it has a valid base image and features configured. SKIP if no devcontainer. FOUND if devcontainer appears buildable.
+2. **devcontainer_runnable** (config_parsing) — If devcontainer exists, check if it has a valid base image and features configured. SKIP if no devcontainer found. FOUND if devcontainer appears buildable.
 
 3. **env_template** (file_existence) — Check for: `.env.example`, `.env.template`, `.envrc.example`, documented env vars in docs. FOUND if env template exists.
 
 4. **local_services_setup** (file_existence) — Check for: `docker-compose.yml` or `compose.yml` with service definitions (Postgres, Redis, etc.). FOUND if local services are containerized.
 
-5. **database_schema** (file_existence) — Check for: migration files (Alembic, Prisma, ActiveRecord, Flyway, Goose), `schema.prisma`, `schema.sql`, SQLAlchemy models. SKIP if project has no database. FOUND if schema management exists.
+5. **database_schema** (file_existence) — Check for: migration files (Alembic, Prisma, ActiveRecord, Flyway, Goose), `schema.prisma`, `schema.sql`, SQLAlchemy models. SKIP if project has no database (no migration files, no ORM, no schema files detected). FOUND if schema management exists.
 
 ### Pillar 6: Debugging & Observability (11 criteria)
 
@@ -201,9 +232,9 @@ Evaluate each criterion. For all config-parsing criteria, read the actual config
 
 9. **pii_handling** (code_search) — Search for: data classification annotations, GDPR controls, redactability systems, PII detection tooling. SKIP if project doesn't handle user data. FOUND if PII is classified and handled.
 
-10. **dast_scanning** (ci_workflow) — Check for: OWASP ZAP, Burp Suite, Nuclei in CI workflows, dynamic scanning steps. SKIP if project is a library/CLI. FOUND if DAST runs in CI.
+10. **dast_scanning** (ci_workflow) — Check for: OWASP ZAP, Burp Suite, Nuclei in CI workflows, dynamic scanning steps. Check applicability matrix for skip. FOUND if DAST runs in CI.
 
-11. **privacy_compliance** (config_parsing) — Check for: data retention policies, consent management, privacy tooling, GDPR/CCPA controls. SKIP if project doesn't collect user data. FOUND if privacy compliance is enforced.
+11. **privacy_compliance** (config_parsing) — Check for: data retention policies, consent management, privacy tooling, GDPR/CCPA controls. FOUND if privacy compliance is enforced.
 
 ### Pillar 8: Task Discovery (4 criteria)
 
@@ -217,11 +248,22 @@ Evaluate each criterion. For all config-parsing criteria, read the actual config
 
 ### Pillar 9: Product & Analytics (3 criteria)
 
-1. **product_analytics_instrumentation** (dependency_check) — Check for: Mixpanel, Amplitude, PostHog, Heap, GA4, custom analytics SDKs in dependencies. SKIP if server infrastructure/library. FOUND if analytics is instrumented.
+1. **product_analytics_instrumentation** (dependency_check) — Check for: Mixpanel, Amplitude, PostHog, Heap, GA4, custom analytics SDKs in dependencies. Check applicability matrix for skip. FOUND if analytics is instrumented.
 
 2. **error_to_insight_pipeline** (config_parsing) — Check for: Sentry-GitHub integration, automated issue creation from errors, error tracking to ticket pipeline. FOUND if errors automatically create trackable issues.
 
 3. **experiment_infrastructure** (config_parsing) — Check for: A/B testing framework, feature flags with metrics integration, experiment platform config. FOUND if experiment infrastructure exists.
+
+### Custom Criteria (from .agentfit.yml)
+
+If `.agentfit.yml` was found and contains `custom_criteria`, evaluate each valid custom criterion:
+- Use the `check` field to determine what to look for in the codebase
+- Use the `found_when` field to determine the condition for FOUND status
+- Assign to the specified `pillar` and `level`
+- Record status, score, and evidence just like default criteria
+- Mark custom criteria with a `custom: true` flag for report rendering
+
+If `.agentfit.yml` contains `disabled_criteria`, remove those criteria from the assessment entirely before scoring. They should not appear in the report at all.
 
 ## Step 3: Calculate Scores
 
@@ -238,6 +280,19 @@ For each pillar, calculate:
 - `total_passed` = sum of all `criteria_passed` across all pillars
 - `total_applicable` = sum of all `criteria_total` across all pillars
 - `pass_rate` = round(`total_passed` / `total_applicable` * 100)
+
+### Weighted Score
+
+Each criterion has an impact tier that determines its weight in the weighted score calculation:
+- **High (3x)**: type_check, lint_config, unit_tests_exist, agents_md, readme, deps_pinned, secrets_management, gitignore_comprehensive, pre_commit_hooks, single_command_setup
+- **Medium (2x)**: All criteria not listed as high or low
+- **Low (1x)**: duplicate_code_detection, tech_debt_tracking, code_modularization, naming_consistency, build_performance_tracking, dead_feature_flag_detection, heavy_dependency_detection, privacy_compliance
+
+Custom criteria from `.agentfit.yml` use their specified `impact_tier` (default: medium).
+
+Calculate: `weighted_score` = round(`sum(weight * passed)` / `sum(weight * applicable)` * 100)
+
+Where `passed` = 1 if found, 0 if missing. Skipped criteria are excluded from both numerator and denominator.
 
 ### Maturity Level Calculation
 
@@ -279,7 +334,34 @@ Create an HTML file with the complete assessment results. Write it to a temporar
 
 Use the Bash tool to write the HTML file. The file should be written to `/tmp/agentfit-report-{project_name}.html`.
 
-After writing the file, open it with: `open /tmp/agentfit-report-{project_name}.html 2>/dev/null || xdg-open /tmp/agentfit-report-{project_name}.html 2>/dev/null || echo "Report saved to /tmp/agentfit-report-{project_name}.html"`
+Also write a JSON sidecar file to `/tmp/agentfit-report-{project_name}-{git_sha}.json` with this structure:
+```json
+{
+  "schema_version": "{skill_version}",
+  "metadata": {
+    "assessment_date": "{ISO 8601 datetime}",
+    "git_sha": "{git_sha}",
+    "skill_version": "{skill_version}",
+    "project_types": ["{type1}", "{type2}"],
+    "total_criteria": {N},
+    "skipped_criteria": {N},
+    "custom_criteria_count": {N}
+  },
+  "scores": {
+    "pass_rate": {pass_rate},
+    "weighted_score": {weighted_score},
+    "maturity_level": {N}
+  },
+  "pillars": {
+    "{pillar_name}": { "passed": {N}, "total": {N}, "percentage": {N} }
+  },
+  "criteria": {
+    "{criterion_name}": { "status": "found|missing|skipped", "evidence": "...", "pillar": "...", "level": "L{N}", "impact_tier": "high|medium|low", "custom": false }
+  }
+}
+```
+
+After writing both files, open the HTML with: `open /tmp/agentfit-report-{project_name}.html 2>/dev/null || xdg-open /tmp/agentfit-report-{project_name}.html 2>/dev/null || echo "Report saved to /tmp/agentfit-report-{project_name}.html"`
 
 ### HTML Template
 
@@ -479,8 +561,8 @@ The HTML report MUST use this structure with inline CSS. Replace all `{placehold
 <body>
 
 <!-- HEADER -->
-<h1>{project_name} <span class="badge">{language}</span></h1>
-<p class="meta">{repo_path}&nbsp;&nbsp;&nbsp;PASS RATE {pass_rate}%</p>
+<h1>{project_name} <span class="badge">{language}</span><!-- Repeat for each detected project type --><span class="badge">{project_type}</span></h1>
+<p class="meta">{repo_path}&nbsp;&nbsp;&nbsp;PASS RATE {pass_rate}%&nbsp;&nbsp;&nbsp;WEIGHTED {weighted_score}%</p>
 <p class="description">{project_description}</p>
 
 <!-- LEVEL PROGRESS BAR -->
@@ -549,6 +631,11 @@ The HTML report MUST use this structure with inline CSS. Replace all `{placehold
   </div>
 </div>
 
+<!-- FOOTER -->
+<footer style="margin-top: 64px; padding-top: 24px; border-top: 1px solid #1a1a2e; font-size: 0.75rem; color: #555; font-family: monospace;">
+  Agent-Fit v{skill_version} &middot; Assessed {assessment_date} &middot; {git_sha} &middot; {total_criteria} criteria evaluated &middot; {skipped_criteria} skipped &middot; {project_types}
+</footer>
+
 </body>
 </html>
 ```
@@ -561,8 +648,10 @@ After opening the HTML report, print a brief summary to the console:
 
 ```
 Agent Fit Report: {project_name}
-Pass Rate: {pass_rate}% | Level: L{maturity_level} ({maturity_label})
+Type: {project_types} | Language: {language} | v{skill_version}
+Pass Rate: {pass_rate}% | Weighted: {weighted_score}% | Level: L{maturity_level} ({maturity_label})
 Report: /tmp/agentfit-report-{project_name}.html
+JSON:   /tmp/agentfit-report-{project_name}-{git_sha}.json
 
 Pillars:
   Style & Validation:       {p1_passed}/{p1_total} ({p1_pct}%)
