@@ -7,7 +7,7 @@ When invoked, perform the following assessment. This is a READ-ONLY analysis —
 ## Step 1: Discover Project Context
 
 1. List root directory files and folders.
-2. Detect the primary language by checking for these manifest files (first match wins):
+2. Detect ALL languages present by checking for these manifest files:
    - `go.mod` → Go
    - `Cargo.toml` → Rust
    - `pyproject.toml` or `setup.py` or `requirements.txt` → Python
@@ -16,16 +16,27 @@ When invoked, perform the following assessment. This is a READ-ONLY analysis —
    - `CMakeLists.txt` or `Makefile` with `.cpp`/`.cc`/`.h` files → C++
    - `Package.swift` → Swift
    - If none found → Unknown
+   The **primary language** is the one with the most source files. Secondary languages are listed in the badge as `Primary + Secondary` (e.g., `Go + TypeScript`). Evaluate language-specific criteria for ALL detected languages — a criterion passes if it is satisfied for ANY detected language.
 3. Extract project name: use the current directory name.
 4. Extract repo path: run `git remote get-url origin 2>/dev/null` and parse `org/repo` from the URL. If no git remote, use the directory path.
 5. Get a short project description from README.md first line/paragraph if available.
+
+### Grounding on Previous Reports
+
+If a previous report exists at `/tmp/agentfit-report-{project_name}.json`, load it and use its criterion statuses as a reference baseline. When evaluating each criterion:
+- If the previous status was `found` and the current evidence still supports it, maintain `found`
+- If the previous status was `missing` and no new evidence is found, maintain `missing`
+- Only change a criterion's status if the underlying signal has demonstrably changed (e.g., a config file was added or removed)
+- In the evidence field, note when a status changed from the previous report: "Changed from missing → found: [reason]"
+
+If no previous report exists, evaluate all criteria fresh.
 
 ## Step 2: Evaluate All Criteria
 
 Evaluate each criterion below using the specified signal type. For each criterion, record:
 - **status**: `found` (passes), `missing` (fails), or `skipped` (not applicable)
 - **score**: `1/1`, `0/1`, or `—/—`
-- **evidence**: A specific sentence referencing the actual file/config found, or what is missing, or why it was skipped
+- **evidence**: A specific sentence referencing the actual file/config found, or what is missing, or why it was skipped. For file-existence criteria, include counts where meaningful (e.g., "Found 847 test files (*_test.go) across 12 packages" not just "Found test files"). For threshold-based criteria, include the measured value and threshold.
 
 ### Criteria Skip Rules
 
@@ -71,15 +82,15 @@ Evaluate each criterion. For all config-parsing criteria, read the actual config
 
 ### Pillar 2: Build System (19 criteria)
 
-1. **build_cmd_doc** (doc_content) — Check README.md, AGENTS.md, CLAUDE.md, Makefile, CONTRIBUTING.md for documented build/install/run commands. FOUND if build commands are clearly documented.
+1. **build_cmd_doc** (doc_content) — Check README.md, AGENTS.md, CLAUDE.md, Makefile, CONTRIBUTING.md for a code block or command documenting build/install/run instructions. FOUND if at least one of these files contains a code block or target with build/run/install instructions. Evidence must cite which file and what command was found.
 
 2. **deps_pinned** (file_existence) — Check for: `go.sum`, `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `uv.lock`, `poetry.lock`, `Cargo.lock`, `Pipfile.lock`. FOUND if lockfile exists. Note: Rust libraries intentionally gitignore Cargo.lock — skip for Rust library projects.
 
-3. **vcs_cli_tools** (dependency_check) — Run `gh --version 2>/dev/null`. FOUND if gh CLI is installed.
+3. **vcs_cli_tools** (doc_content + file_existence) — Check for: VCS workflow tooling documented in Makefile, CONTRIBUTING.md, or README.md (e.g., PR creation commands, branch policies), OR `.github/workflows/*.yml` referencing `gh` CLI commands. FOUND if VCS tooling usage is documented or automated in CI.
 
-4. **single_command_setup** (doc_content) — Check README.md, AGENTS.md, CONTRIBUTING.md for a single setup command (e.g., `make setup`, `docker-compose up`, `npm install`, `./dev doctor`). FOUND if single-command setup is documented.
+4. **single_command_setup** (doc_content) — Check README.md, AGENTS.md, CONTRIBUTING.md for a code block with a single command that completes project setup (not a multi-step procedure). FOUND if a single setup command is documented in a code block. Evidence must quote the command found.
 
-5. **fast_ci_feedback** (ci_workflow) — Read `.github/workflows/*.yml`. Check if any CI workflow completes essential checks. Estimate based on job count and step complexity. FOUND if CI appears to complete under 10 minutes.
+5. **fast_ci_feedback** (ci_workflow) — Read `.github/workflows/*.yml`. FOUND if CI workflow uses caching (actions/cache, turbo, sccache, or language-specific caching) AND does not include matrix > 5 targets without parallelization. Evidence must cite specific caching actions and matrix size found.
 
 6. **deployment_frequency** (git_history) — Run `git tag --sort=-creatordate | head -20` and check dates. FOUND if multiple releases per month or regular release cadence visible.
 
@@ -129,7 +140,7 @@ Evaluate each criterion. For all config-parsing criteria, read the actual config
 
 ### Pillar 4: Documentation (8 criteria)
 
-1. **readme** (file_existence + doc_content) — Check for README.md at root. Verify it has meaningful content (setup instructions, description, usage). FOUND if comprehensive README exists.
+1. **readme** (file_existence + doc_content) — Check for README.md at root. FOUND if README contains at least 2 of: project description, installation instructions, usage examples, API documentation. Evidence must list which sections were found.
 
 2. **agents_md** (file_existence) — Check for: `AGENTS.md` or `CLAUDE.md` at root documenting commands, conventions, and build steps for agents. FOUND if agent instructions file exists.
 
@@ -211,7 +222,7 @@ Evaluate each criterion. For all config-parsing criteria, read the actual config
 
 2. **issue_labeling_system** (api_check) — Run `gh label list --limit 50 2>/dev/null` and check for organized label taxonomy (priority, type, area labels). SKIP if gh unavailable. FOUND if comprehensive labels exist.
 
-3. **backlog_health** (api_check) — Run `gh issue list --limit 20 --json title,labels 2>/dev/null`. Check if >70% of issues have labels and titles >10 chars. SKIP if gh unavailable. FOUND if backlog is well-maintained.
+3. **backlog_health** (api_check) — Run `gh issue list --limit 20 --json title,labels 2>/dev/null`. Check if >70% of issues have labels and titles >10 chars. SKIP if gh unavailable. FOUND if backlog is well-maintained. Evidence must include counts: "Found X/Y issues with labels (Z%, threshold: 70%)".
 
 4. **pr_templates** (file_existence) — Check for: `.github/pull_request_template.md`, `.github/PULL_REQUEST_TEMPLATE/`, `PULL_REQUEST_TEMPLATE.md`. FOUND if PR template exists with structured sections.
 
@@ -282,6 +293,18 @@ Create an HTML file with the complete assessment results. Write it to a temporar
 Use the Bash tool to write the HTML file. The file should be written to `/tmp/agentfit-report-{project_name}.html`.
 
 After writing the file, open it with: `open /tmp/agentfit-report-{project_name}.html 2>/dev/null || xdg-open /tmp/agentfit-report-{project_name}.html 2>/dev/null || echo "Report saved to /tmp/agentfit-report-{project_name}.html"`
+
+Also write the assessment data as JSON to `/tmp/agentfit-report-{project_name}.json` with this structure:
+```json
+{
+  "project_name": "{project_name}",
+  "timestamp": "{ISO 8601 timestamp}",
+  "criteria": {
+    "{criterion_name}": { "status": "found|missing|skipped", "evidence": "..." }
+  }
+}
+```
+This JSON file serves as the grounding reference for future evaluations.
 
 ### HTML Template
 
