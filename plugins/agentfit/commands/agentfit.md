@@ -38,15 +38,32 @@ Evaluate each criterion below using the specified signal type. For each criterio
 - **score**: `1/1`, `0/1`, or `—/—`
 - **evidence**: A specific sentence referencing the actual file/config found, or what is missing, or why it was skipped. For file-existence criteria, include counts where meaningful (e.g., "Found 847 test files (*_test.go) across 12 packages" not just "Found test files"). For threshold-based criteria, include the measured value and threshold.
 
+### Project Type Detection
+
+Before evaluating criteria, detect the project type to determine which skip rules apply:
+
+- **Monorepo**: Check for `pnpm-workspace.yaml`, `lerna.json`, `nx.json`, `turbo.json`, Cargo workspace members in `Cargo.toml`, or multiple `go.mod` files. If any found, mark as monorepo.
+- **Library**: Check if `package.json` has no `bin` field and has a `main`/`module`/`exports` field, or if the project is a Go module without `cmd/`, or a Rust crate with `[lib]` in `Cargo.toml` and no `[[bin]]`. If so, mark as library.
+- **CLI tool**: Check if `package.json` has a `bin` field, or `cmd/` directory exists (Go), or `[[bin]]` in `Cargo.toml`, or `entry_points.console_scripts` in Python config.
+- **Web app**: Check for frontend frameworks (Next.js, React, Vue, Angular, Svelte) in dependencies, or `index.html`, or web server routes.
+- **API service**: Check for HTTP server frameworks (Express, Gin, FastAPI, Actix, Flask) without frontend assets.
+
+Record the detected project type. A project may match multiple types (e.g., monorepo + web app).
+
 ### Criteria Skip Rules
 
 Skip a criterion (mark as `—/—`) when:
 - It requires `gh` CLI but `gh auth status` fails or `gh` is not installed
 - It checks for database tooling but the project has no database
-- It checks for deployment/server tooling but the project is a library
+- It checks for deployment/server tooling but the project is a library or CLI tool
 - It checks for N+1 queries but the project doesn't use an ORM
 - It checks for PII/privacy but the project doesn't handle user data
 - It checks for DAST but the project is a CLI tool or library
+- It checks for monorepo tooling (`monorepo_tooling`, `version_drift_detection`) but the project is not a monorepo
+- It checks for devcontainer runnability (`devcontainer_runnable`) but no devcontainer config exists
+- It checks for dead feature flags (`dead_feature_flag_detection`) but no feature flag system is detected
+- It checks for product analytics (`product_analytics_instrumentation`) but the project is a library, CLI tool, or server infrastructure
+- It checks for bundle size (`heavy_dependency_detection`) but the project is not a frontend/bundled project
 
 When skipping, always explain why in the evidence field.
 
@@ -72,7 +89,7 @@ Evaluate each criterion. For all config-parsing criteria, read the actual config
 
 9. **cyclomatic_complexity** (config_parsing) — Check for: `gocyclo` or `cyclop` in golangci-lint config, ESLint `complexity` rule, Ruff `C901`, Clippy `cognitive_complexity`. FOUND if complexity analysis tools are configured.
 
-10. **dead_code_detection** (config_parsing) — Check for: `knip` in package.json, `vulture` in Python config, `staticcheck` unused checks, Ruff `F401`/`F841`, Clippy `dead_code` warnings, `deadcode` tool. FOUND if dead code detection is configured.
+10. **dead_code_detection** (config_parsing) — Check for: `knip` in package.json (knip code analysis mode — detects unused exports, files, and types), `vulture` in Python config, `staticcheck` unused checks, Ruff `F401`/`F841`, Clippy `dead_code` warnings, `deadcode` tool. FOUND if dead code detection is configured.
 
 11. **duplicate_code_detection** (config_parsing) — Check for: `jscpd` config or in CI, `PMD CPD`, `Simian`, golangci-lint `dupl` linter, SonarQube duplication. FOUND if duplication scanner is configured.
 
@@ -100,13 +117,13 @@ Evaluate each criterion. For all config-parsing criteria, read the actual config
 
 9. **automated_pr_review** (ci_workflow + code_search) — Check for: CodeRabbit, Copilot Code Review, Danger.js, custom review bots in CI, Semgrep in PR checks. FOUND if automated review comments are generated on PRs.
 
-10. **agentic_development** (file_existence + git_history) — Check for: `.claude/skills/`, `.factory/skills/`, `AGENTS.md`, `CLAUDE.md`. Also run `git log --format="%aN" -100 2>/dev/null` and check for agent co-author signatures (Claude, Copilot, factory-droid). FOUND if agent tooling directories exist or agent co-authorship visible.
+10. **agentic_development** (git_history) — Run `git log --format="%aN" -100 2>/dev/null` and check for agent co-author signatures (Claude, Copilot, factory-droid, Devin, Sweep). FOUND if agent co-authorship is visible in recent git history. Note: file-existence checks for AGENTS.md and .claude/skills/ are already covered by the `agents_md` and `skills` criteria in Pillar 4 — this criterion only checks the unique signal of agents actively contributing code.
 
 11. **feature_flag_infrastructure** (config_parsing + dependency_check) — Check for: LaunchDarkly, Statsig, Unleash, custom feature flag config files, `crates/feature_flags`. FOUND if feature flag system is configured.
 
 12. **build_performance_tracking** (config_parsing) — Check for: Bazel distributed cache config, turbo/nx caching, sccache, build metrics export, CI build timing. FOUND if build times are cached or tracked.
 
-13. **unused_deps_detection** (ci_workflow + config_parsing) — Check for: `depcheck` in scripts, `go mod tidy` in CI, `cargo-udeps`, `deptry`, `knip` dependency mode. FOUND if unused deps are detected automatically.
+13. **unused_deps_detection** (ci_workflow + config_parsing) — Check for: `depcheck` in scripts, `go mod tidy` in CI, `cargo-udeps`, `deptry`, `knip` in package.json (knip dependency mode — detects unused packages in node_modules). FOUND if unused deps are detected automatically.
 
 14. **monorepo_tooling** (config_parsing) — Check for: Lerna, Nx, Turborepo configs, Bazel BUILD files, Cargo workspace members, pnpm-workspace.yaml. SKIP if not a monorepo. FOUND if monorepo management tooling exists.
 
@@ -186,7 +203,7 @@ Evaluate each criterion. For all config-parsing criteria, read the actual config
 
 8. **profiling_instrumentation** (code_search + dependency_check) — Check for: `pprof` imports (Go), `py-spy`/`Pyroscope` (Python), profiling middleware, `Performance.md`, tracy (Rust/C++). FOUND if profiling infrastructure exists.
 
-9. **code_quality_metrics** (ci_workflow) — Check for: Codecov integration, CodeQL workflows, SonarQube/SonarCloud config, CodeClimate, coverage upload in CI. FOUND if code quality is tracked via CI.
+9. **code_quality_metrics** (ci_workflow) — Check for: Codecov integration, SonarQube/SonarCloud config, CodeClimate, coverage upload in CI, Coveralls. FOUND if code quality or coverage tracking is configured via CI. Note: CodeQL is a SAST security tool and is assessed under `automated_security_review` in Pillar 7 — not counted here to avoid double-counting.
 
 10. **circuit_breakers** (dependency_check) — Check for: circuit breaker libraries (`sony/gobreaker`, `resilience4j`, `hystrix`, `cockatiel`), retry-with-backoff patterns. FOUND if resilience patterns are implemented.
 
@@ -260,11 +277,11 @@ Each criterion is assigned to a maturity level (L1-L5). Calculate completion per
 
 **Level 2 (Documented):** pre_commit_hooks, naming_consistency, agents_md, skills, devcontainer, env_template, local_services_setup, database_schema, single_command_setup, branch_protection, codeowners, secrets_management, issue_templates, pr_templates, structured_logging
 
-**Level 3 (Standardized):** large_file_detection, code_modularization, cyclomatic_complexity, dead_code_detection, duplicate_code_detection, tech_debt_tracking, integration_tests_exist, test_coverage_thresholds, test_isolation, agents_md_validation, automated_doc_generation, api_schema_docs, service_flow_documented, distributed_tracing, metrics_collection, health_checks, code_quality_metrics, secret_scanning, dependency_update_automation, automated_security_review, log_scrubbing, issue_labeling_system, backlog_health, fast_ci_feedback, release_automation, release_notes_automation, unused_deps_detection
+**Level 3 (Standardized):** large_file_detection, code_modularization, cyclomatic_complexity, dead_code_detection, duplicate_code_detection, tech_debt_tracking, integration_tests_exist, test_coverage_thresholds, test_isolation, agents_md_validation, automated_doc_generation, api_schema_docs, service_flow_documented, distributed_tracing, metrics_collection, health_checks, code_quality_metrics, secret_scanning, dependency_update_automation, automated_security_review, log_scrubbing, issue_labeling_system, backlog_health, fast_ci_feedback, release_automation, release_notes_automation, unused_deps_detection, heavy_dependency_detection
 
-**Level 4 (Optimized):** n_plus_one_detection, deployment_frequency, automated_pr_review, agentic_development, feature_flag_infrastructure, build_performance_tracking, monorepo_tooling, flaky_test_detection, test_performance_tracking, devcontainer_runnable, alerting_configured, deployment_observability, error_tracking_contextualized, profiling_instrumentation, circuit_breakers, runbooks_documented, pii_handling
+**Level 4 (Optimized):** n_plus_one_detection, deployment_frequency, automated_pr_review, agentic_development, feature_flag_infrastructure, build_performance_tracking, monorepo_tooling, flaky_test_detection, test_performance_tracking, devcontainer_runnable, alerting_configured, deployment_observability, error_tracking_contextualized, profiling_instrumentation, circuit_breakers, runbooks_documented, pii_handling, dast_scanning, privacy_compliance
 
-**Level 5 (Autonomous):** dead_feature_flag_detection, heavy_dependency_detection, progressive_rollout, rollback_automation, version_drift_detection, product_analytics_instrumentation, error_to_insight_pipeline, experiment_infrastructure, dast_scanning, privacy_compliance
+**Level 5 (Autonomous):** dead_feature_flag_detection, progressive_rollout, rollback_automation, version_drift_detection, product_analytics_instrumentation, error_to_insight_pipeline, experiment_infrastructure
 
 **Gated progression rule:** To unlock level N, the repository must pass ≥80% of applicable criteria at level N AND all previous levels. Calculate each level's completion percentage (excluding skipped criteria). The maturity level is the highest level where the 80% gate is met for that level and all levels below it.
 
@@ -274,7 +291,7 @@ Each criterion is assigned to a maturity level (L1-L5). Calculate completion per
 
 **Strengths (top 3):** Select the 3 pillars with the highest percentage scores. For each, list the pillar name with percentage and 2-3 key passing criteria as evidence.
 
-**Opportunities (top 3):** Select the 3 most impactful MISSING criteria, prioritized by maturity level (L1 gaps first, then L2, then L3, etc.). For each, provide the criterion name and a specific remediation action.
+**Opportunities (top 3):** Select the 3 most impactful MISSING criteria, prioritized by maturity level (L1 gaps first, then L2, then L3, etc.). Within a level, prioritize criteria from the pillar with the lowest pass rate. Within the same pillar, prioritize alphabetically by criterion name. For each, provide the criterion name and a specific remediation action.
 
 ### Summary Headline
 
