@@ -318,8 +318,8 @@ After writing the file, open it with: `open /tmp/agentfit-report-{project_name}.
 Also write the assessment data as JSON to `/tmp/agentfit-report-{project_name}.json` with this structure:
 ```json
 {
-  "schema_version": "2.0.0",
-  "skill_version": "2.0.0",
+  "schema_version": "1.0.0",
+  "skill_version": "1.0.0",
   "project_name": "{project_name}",
   "timestamp": "{ISO 8601 timestamp}",
   "pass_rate": {pass_rate},
@@ -620,7 +620,7 @@ The HTML report MUST use this structure with inline CSS. Replace all `{placehold
 </main>
 
 <footer style="margin-top:48px;padding-top:24px;border-top:1px solid #1a1a2e;font-size:0.75rem;color:#666;font-family:monospace;">
-  Agent Fit v2.0.0 · {assessment_date} · {git_sha} · {total_evaluated} criteria evaluated · {total_skipped} skipped
+  Agent Fit v1.0.0 · {assessment_date} · {git_sha} · {total_evaluated} criteria evaluated · {total_skipped} skipped
 </footer>
 
 </body>
@@ -649,3 +649,51 @@ Pillars:
   Task Discovery:           {p8_passed}/{p8_total} ({p8_pct}%)
   Product & Analytics:      {p9_passed}/{p9_total} ({p9_pct}%)
 ```
+
+## CI Integration
+
+To run Agent Fit in a GitHub Action, add a workflow that invokes `/agentfit` on every pull request, uploads the JSON artifact for trend tracking, and posts a summary comment on the PR.
+
+### Example GitHub Action Workflow
+
+```yaml
+name: Agent Fit Assessment
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  agentfit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Agent Fit
+        run: claude -p "/agentfit"
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Upload JSON artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentfit-report-${{ github.sha }}
+          path: /tmp/agentfit-report-*.json
+
+      - name: Post PR comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const files = require('child_process').execSync('ls /tmp/agentfit-report-*.json').toString().trim().split('\n');
+            const report = JSON.parse(fs.readFileSync(files[0], 'utf8'));
+            const body = `## Agent Fit Report\n\n` +
+              `**Pass Rate:** ${report.pass_rate}% | **Weighted:** ${report.weighted_score}% | **Level:** L${report.maturity_level}\n\n` +
+              `<details><summary>Criteria Summary</summary>\n\n` +
+              Object.entries(report.criteria).map(([k,v]) => `- ${v.status === 'found' ? '✓' : v.status === 'missing' ? '✗' : '—'} **${k}**: ${v.evidence}`).join('\n') +
+              `\n</details>`;
+            github.rest.issues.createComment({ issue_number: context.issue.number, owner: context.repo.owner, repo: context.repo.repo, body });
+```
+
+**Key points:**
+- The JSON artifact at `/tmp/agentfit-report-{project_name}.json` is uploaded per-run for trend tracking across CI runs
+- The PR comment posts pass rate, weighted score, and maturity level (similar to Codecov)
+- Compare JSON artifacts across runs to detect score regressions
