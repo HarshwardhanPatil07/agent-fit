@@ -7,7 +7,7 @@ When invoked, perform the following assessment. This is a READ-ONLY analysis —
 ## Step 1: Discover Project Context
 
 1. List root directory files and folders.
-2. Detect the primary language by checking for these manifest files (first match wins):
+2. Detect ALL languages present by checking for these manifest files:
    - `go.mod` → Go
    - `Cargo.toml` → Rust
    - `pyproject.toml` or `setup.py` or `requirements.txt` → Python
@@ -18,26 +18,54 @@ When invoked, perform the following assessment. This is a READ-ONLY analysis —
    - `Package.swift` → Swift
    - `mix.exs` → Elixir
    - If none found → Unknown
+   The **primary language** is the one with the most source files. Secondary languages are listed in the badge as `Primary + Secondary` (e.g., `Go + TypeScript`). Evaluate language-specific criteria for ALL detected languages — a criterion passes if it is satisfied for ANY detected language.
 3. Extract project name: use the current directory name.
 4. Extract repo path: run `git remote get-url origin 2>/dev/null` and parse `org/repo` from the URL. If no git remote, use the directory path.
 5. Get a short project description from README.md first line/paragraph if available.
+
+### Grounding on Previous Reports
+
+If a previous report exists at `/tmp/agentfit-report-{project_name}.json`, load it and use its criterion statuses as a reference baseline. When evaluating each criterion:
+- If the previous status was `found` and the current evidence still supports it, maintain `found`
+- If the previous status was `missing` and no new evidence is found, maintain `missing`
+- Only change a criterion's status if the underlying signal has demonstrably changed (e.g., a config file was added or removed)
+- In the evidence field, note when a status changed from the previous report: "Changed from missing → found: [reason]"
+
+If no previous report exists, evaluate all criteria fresh.
 
 ## Step 2: Evaluate All Criteria
 
 Evaluate each criterion below using the specified signal type. For each criterion, record:
 - **status**: `found` (passes), `missing` (fails), or `skipped` (not applicable)
 - **score**: `1/1`, `0/1`, or `—/—`
-- **evidence**: A specific sentence referencing the actual file/config found, or what is missing, or why it was skipped
+- **evidence**: A specific sentence referencing the actual file/config found, or what is missing, or why it was skipped. For file-existence criteria, include counts where meaningful (e.g., "Found 847 test files (*_test.go) across 12 packages" not just "Found test files"). For threshold-based criteria, include the measured value and threshold.
+
+### Project Type Detection
+
+Before evaluating criteria, detect the project type to determine which skip rules apply:
+
+- **Monorepo**: Check for `pnpm-workspace.yaml`, `lerna.json`, `nx.json`, `turbo.json`, Cargo workspace members in `Cargo.toml`, or multiple `go.mod` files. If any found, mark as monorepo.
+- **Library**: Check if `package.json` has no `bin` field and has a `main`/`module`/`exports` field, or if the project is a Go module without `cmd/`, or a Rust crate with `[lib]` in `Cargo.toml` and no `[[bin]]`. If so, mark as library.
+- **CLI tool**: Check if `package.json` has a `bin` field, or `cmd/` directory exists (Go), or `[[bin]]` in `Cargo.toml`, or `entry_points.console_scripts` in Python config.
+- **Web app**: Check for frontend frameworks (Next.js, React, Vue, Angular, Svelte) in dependencies, or `index.html`, or web server routes.
+- **API service**: Check for HTTP server frameworks (Express, Gin, FastAPI, Actix, Flask) without frontend assets.
+
+Record the detected project type. A project may match multiple types (e.g., monorepo + web app).
 
 ### Criteria Skip Rules
 
 Skip a criterion (mark as `—/—`) when:
 - It requires `gh` CLI but `gh auth status` fails or `gh` is not installed
 - It checks for database tooling but the project has no database
-- It checks for deployment/server tooling but the project is a library
+- It checks for deployment/server tooling but the project is a library or CLI tool
 - It checks for N+1 queries but the project doesn't use an ORM
 - It checks for PII/privacy but the project doesn't handle user data
 - It checks for DAST but the project is a CLI tool or library
+- It checks for monorepo tooling (`monorepo_tooling`, `version_drift_detection`) but the project is not a monorepo
+- It checks for devcontainer runnability (`devcontainer_runnable`) but no devcontainer config exists
+- It checks for dead feature flags (`dead_feature_flag_detection`) but no feature flag system is detected
+- It checks for product analytics (`product_analytics_instrumentation`) but the project is a library, CLI tool, or server infrastructure
+- It checks for bundle size (`heavy_dependency_detection`) but the project is not a frontend/bundled project
 
 When skipping, always explain why in the evidence field.
 
@@ -63,7 +91,7 @@ Evaluate each criterion. For all config-parsing criteria, read the actual config
 
 9. **cyclomatic_complexity** (config_parsing) — Check for: `gocyclo` or `cyclop` in golangci-lint config, ESLint `complexity` rule, Ruff `C901`, Clippy `cognitive_complexity`. FOUND if complexity analysis tools are configured.
 
-10. **dead_code_detection** (config_parsing) — Check for: `knip` in package.json, `vulture` in Python config, `staticcheck` unused checks, Ruff `F401`/`F841`, Clippy `dead_code` warnings, `deadcode` tool. FOUND if dead code detection is configured.
+10. **dead_code_detection** (config_parsing) — Check for: `knip` in package.json (knip code analysis mode — detects unused exports, files, and types), `vulture` in Python config, `staticcheck` unused checks, Ruff `F401`/`F841`, Clippy `dead_code` warnings, `deadcode` tool. FOUND if dead code detection is configured.
 
 11. **duplicate_code_detection** (config_parsing) — Check for: `jscpd` config or in CI, `PMD CPD`, `Simian`, golangci-lint `dupl` linter, SonarQube duplication. FOUND if duplication scanner is configured.
 
@@ -73,15 +101,15 @@ Evaluate each criterion. For all config-parsing criteria, read the actual config
 
 ### Pillar 2: Build System (19 criteria)
 
-1. **build_cmd_doc** (doc_content) — Check README.md, AGENTS.md, CLAUDE.md, Makefile, Taskfile.yml, Justfile, Earthfile, CONTRIBUTING.md for documented build/install/run commands. FOUND if build commands are clearly documented.
+1. **build_cmd_doc** (doc_content) — Check README.md, AGENTS.md, CLAUDE.md, Makefile, Taskfile.yml, Justfile, Earthfile, CONTRIBUTING.md for a code block or command documenting build/install/run instructions. FOUND if at least one of these files contains a code block or target with build/run/install instructions. Evidence must cite which file and what command was found.
 
 2. **deps_pinned** (file_existence) — Check for: `go.sum`, `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `uv.lock`, `poetry.lock`, `Cargo.lock`, `Pipfile.lock`, `gradle.lockfile` or `buildSrc/*.lock`, `mix.lock` (Elixir). FOUND if lockfile exists. Note: Rust libraries intentionally gitignore Cargo.lock — skip for Rust library projects. Note: Maven/Gradle projects often pin versions in POM/build files directly — check for version pinning in `pom.xml` or `build.gradle` if no lockfile.
 
-3. **vcs_cli_tools** (dependency_check) — Run `gh --version 2>/dev/null`. FOUND if gh CLI is installed.
+3. **vcs_cli_tools** (doc_content + file_existence) — Check for: VCS workflow tooling documented in Makefile, CONTRIBUTING.md, or README.md (e.g., PR creation commands, branch policies), OR `.github/workflows/*.yml` referencing `gh` CLI commands. FOUND if VCS tooling usage is documented or automated in CI.
 
-4. **single_command_setup** (doc_content) — Check README.md, AGENTS.md, CONTRIBUTING.md for a single setup command (e.g., `make setup`, `task setup`, `just setup`, `earthly +setup`, `docker-compose up`, `npm install`, `nix develop`, `./dev doctor`). FOUND if single-command setup is documented.
+4. **single_command_setup** (doc_content) — Check README.md, AGENTS.md, CONTRIBUTING.md for a code block with a single setup command (e.g., `make setup`, `task setup`, `just setup`, `earthly +setup`, `docker-compose up`, `npm install`, `nix develop`, `./dev doctor`) that completes project setup (not a multi-step procedure). FOUND if a single setup command is documented in a code block. Evidence must quote the command found.
 
-5. **fast_ci_feedback** (ci_workflow) — Read `.github/workflows/*.yml`. Check if any CI workflow completes essential checks. Estimate based on job count and step complexity. FOUND if CI appears to complete under 10 minutes.
+5. **fast_ci_feedback** (ci_workflow) — Read `.github/workflows/*.yml`. FOUND if CI workflow uses caching (actions/cache, turbo, sccache, or language-specific caching) AND does not include matrix > 5 targets without parallelization. Evidence must cite specific caching actions and matrix size found.
 
 6. **deployment_frequency** (git_history) — Run `git tag --sort=-creatordate | head -20` and check dates. FOUND if multiple releases per month or regular release cadence visible.
 
@@ -91,13 +119,13 @@ Evaluate each criterion. For all config-parsing criteria, read the actual config
 
 9. **automated_pr_review** (ci_workflow + code_search) — Check for: CodeRabbit, Copilot Code Review, Danger.js, custom review bots in CI, Semgrep in PR checks, CodeAnt AI, Graphite Reviewer, Sourcery, `claude-code` review in CI. FOUND if automated review comments are generated on PRs.
 
-10. **agentic_development** (file_existence + git_history) — Check for: `.claude/skills/`, `.factory/skills/`, `AGENTS.md`, `CLAUDE.md`. Also run `git log --format="%aN" -100 2>/dev/null` and check for agent co-author signatures (Claude, Copilot, factory-droid). FOUND if agent tooling directories exist or agent co-authorship visible.
+10. **agentic_development** (git_history) — Run `git log --format="%aN" -100 2>/dev/null` and check for agent co-author signatures (Claude, Copilot, factory-droid, Devin, Sweep). FOUND if agent co-authorship is visible in recent git history. Note: file-existence checks for AGENTS.md and .claude/skills/ are already covered by the `agents_md` and `skills` criteria in Pillar 4 — this criterion only checks the unique signal of agents actively contributing code.
 
 11. **feature_flag_infrastructure** (config_parsing + dependency_check) — Check for: LaunchDarkly, Statsig, Unleash, custom feature flag config files, `crates/feature_flags`. FOUND if feature flag system is configured.
 
 12. **build_performance_tracking** (config_parsing) — Check for: Bazel distributed cache config, Turborepo remote cache (`turbo.json` with `remoteCache`), Nx Cloud (`nx.json` with `nxCloudAccessToken` or `nx-cloud.env`), sccache, Gradle build scans (`--scan` flag or `com.gradle.enterprise` plugin), build metrics export, CI build timing with `actions/cache`. FOUND if build times are cached or tracked.
 
-13. **unused_deps_detection** (ci_workflow + config_parsing) — Check for: `depcheck` in scripts, `go mod tidy` in CI, `cargo-udeps`, `deptry`, `knip` dependency mode. FOUND if unused deps are detected automatically.
+13. **unused_deps_detection** (ci_workflow + config_parsing) — Check for: `depcheck` in scripts, `go mod tidy` in CI, `cargo-udeps`, `deptry`, `knip` in package.json (knip dependency mode — detects unused packages in node_modules). FOUND if unused deps are detected automatically.
 
 14. **monorepo_tooling** (config_parsing) — Check for: Lerna, Nx (`nx.json`), Turborepo (`turbo.json`), Bazel BUILD files, Cargo workspace members, `pnpm-workspace.yaml`, Gradle multi-project builds, Earthly multi-target builds. SKIP if not a monorepo. FOUND if monorepo management tooling exists.
 
@@ -131,7 +159,7 @@ Evaluate each criterion. For all config-parsing criteria, read the actual config
 
 ### Pillar 4: Documentation (10 criteria)
 
-1. **readme** (file_existence + doc_content) — Check for README.md at root. Verify it has meaningful content (setup instructions, description, usage). FOUND if comprehensive README exists.
+1. **readme** (file_existence + doc_content) — Check for README.md at root. FOUND if README contains at least 2 of: project description, installation instructions, usage examples, API documentation. Evidence must list which sections were found.
 
 2. **agents_md** (file_existence) — Check for: `AGENTS.md` or `CLAUDE.md` at root documenting commands, conventions, and build steps for agents. FOUND if agent instructions file exists.
 
@@ -181,7 +209,7 @@ Evaluate each criterion. For all config-parsing criteria, read the actual config
 
 8. **profiling_instrumentation** (code_search + dependency_check) — Check for: `pprof` imports (Go), `py-spy`/`Pyroscope` (Python), profiling middleware, `Performance.md`, tracy (Rust/C++). FOUND if profiling infrastructure exists.
 
-9. **code_quality_metrics** (ci_workflow) — Check for: Codecov integration, CodeQL workflows, SonarQube/SonarCloud config, CodeClimate, coverage upload in CI. FOUND if code quality is tracked via CI.
+9. **code_quality_metrics** (ci_workflow) — Check for: Codecov integration, SonarQube/SonarCloud config, CodeClimate, coverage upload in CI, Coveralls. FOUND if code quality or coverage tracking is configured via CI. Note: CodeQL is a SAST security tool and is assessed under `automated_security_review` in Pillar 7 — not counted here to avoid double-counting.
 
 10. **circuit_breakers** (dependency_check) — Check for: circuit breaker libraries (`sony/gobreaker`, `resilience4j`, `hystrix`, `cockatiel`), retry-with-backoff patterns. FOUND if resilience patterns are implemented.
 
@@ -221,7 +249,7 @@ Evaluate each criterion. For all config-parsing criteria, read the actual config
 
 2. **issue_labeling_system** (api_check) — Run `gh label list --limit 50 2>/dev/null` and check for organized label taxonomy (priority, type, area labels). SKIP if gh unavailable. FOUND if comprehensive labels exist.
 
-3. **backlog_health** (api_check) — Run `gh issue list --limit 20 --json title,labels 2>/dev/null`. Check if >70% of issues have labels and titles >10 chars. SKIP if gh unavailable. FOUND if backlog is well-maintained.
+3. **backlog_health** (api_check) — Run `gh issue list --limit 20 --json title,labels 2>/dev/null`. Check if >70% of issues have labels and titles >10 chars. SKIP if gh unavailable. FOUND if backlog is well-maintained. Evidence must include counts: "Found X/Y issues with labels (Z%, threshold: 70%)".
 
 4. **pr_templates** (file_existence) — Check for: `.github/pull_request_template.md`, `.github/PULL_REQUEST_TEMPLATE/`, `PULL_REQUEST_TEMPLATE.md`. FOUND if PR template exists with structured sections.
 
@@ -259,19 +287,21 @@ Each criterion is assigned to a maturity level (L1-L5). Calculate completion per
 
 **Level 2 (Documented):** pre_commit_hooks, naming_consistency, agents_md, skills, devcontainer, env_template, local_services_setup, database_schema, single_command_setup, branch_protection, codeowners, secrets_management, issue_templates, pr_templates, structured_logging, changelog_maintained
 
-**Level 3 (Standardized):** large_file_detection, code_modularization, cyclomatic_complexity, dead_code_detection, duplicate_code_detection, tech_debt_tracking, integration_tests_exist, test_coverage_thresholds, test_isolation, agents_md_validation, automated_doc_generation, api_schema_docs, service_flow_documented, doc_examples_tested, distributed_tracing, metrics_collection, health_checks, code_quality_metrics, secret_scanning, dependency_update_automation, automated_security_review, log_scrubbing, container_image_scanning, sbom_generation, issue_labeling_system, backlog_health, fast_ci_feedback, release_automation, release_notes_automation, unused_deps_detection
+**Level 3 (Standardized):** large_file_detection, code_modularization, cyclomatic_complexity, dead_code_detection, duplicate_code_detection, tech_debt_tracking, integration_tests_exist, test_coverage_thresholds, test_isolation, agents_md_validation, automated_doc_generation, api_schema_docs, service_flow_documented, doc_examples_tested, distributed_tracing, metrics_collection, health_checks, code_quality_metrics, secret_scanning, dependency_update_automation, automated_security_review, log_scrubbing, container_image_scanning, sbom_generation, issue_labeling_system, backlog_health, fast_ci_feedback, release_automation, release_notes_automation, unused_deps_detection, heavy_dependency_detection
 
-**Level 4 (Optimized):** n_plus_one_detection, deployment_frequency, automated_pr_review, agentic_development, feature_flag_infrastructure, build_performance_tracking, monorepo_tooling, flaky_test_detection, test_performance_tracking, devcontainer_runnable, alerting_configured, deployment_observability, error_tracking_contextualized, profiling_instrumentation, circuit_breakers, runbooks_documented, pii_handling
+**Level 4 (Optimized):** n_plus_one_detection, deployment_frequency, automated_pr_review, agentic_development, feature_flag_infrastructure, build_performance_tracking, monorepo_tooling, flaky_test_detection, test_performance_tracking, devcontainer_runnable, alerting_configured, deployment_observability, error_tracking_contextualized, profiling_instrumentation, circuit_breakers, runbooks_documented, pii_handling, dast_scanning, privacy_compliance
 
-**Level 5 (Autonomous):** dead_feature_flag_detection, heavy_dependency_detection, progressive_rollout, rollback_automation, version_drift_detection, product_analytics_instrumentation, error_to_insight_pipeline, experiment_infrastructure, dast_scanning, privacy_compliance
+**Level 5 (Autonomous):** dead_feature_flag_detection, progressive_rollout, rollback_automation, version_drift_detection, product_analytics_instrumentation, error_to_insight_pipeline, experiment_infrastructure
 
 **Gated progression rule:** To unlock level N, the repository must pass ≥80% of applicable criteria at level N AND all previous levels. Calculate each level's completion percentage (excluding skipped criteria). The maturity level is the highest level where the 80% gate is met for that level and all levels below it.
+
+**Level bar weights:** For the progress bar, calculate each level's visual width proportional to its applicable criteria count: `{lN_weight} = round(applicable_criteria_at_level_N / total_applicable_criteria * 100)`. Ensure the 5 weights sum to 100 (adjust the largest to absorb rounding).
 
 ### Strengths and Opportunities
 
 **Strengths (top 3):** Select the 3 pillars with the highest percentage scores. For each, list the pillar name with percentage and 2-3 key passing criteria as evidence.
 
-**Opportunities (top 3):** Select the 3 most impactful MISSING criteria, prioritized by maturity level (L1 gaps first, then L2, then L3, etc.). For each, provide the criterion name and a specific remediation action.
+**Opportunities (top 3):** Select the 3 most impactful MISSING criteria, prioritized by maturity level (L1 gaps first, then L2, then L3, etc.). Within a level, prioritize criteria from the pillar with the lowest pass rate. Within the same pillar, prioritize alphabetically by criterion name. For each, provide the criterion name and a specific remediation action.
 
 ### Summary Headline
 
@@ -290,6 +320,18 @@ Create an HTML file with the complete assessment results. Write it to a temporar
 Use the Bash tool to write the HTML file. The file should be written to `/tmp/agentfit-report-{project_name}.html`.
 
 After writing the file, open it with: `open /tmp/agentfit-report-{project_name}.html 2>/dev/null || xdg-open /tmp/agentfit-report-{project_name}.html 2>/dev/null || echo "Report saved to /tmp/agentfit-report-{project_name}.html"`
+
+Also write the assessment data as JSON to `/tmp/agentfit-report-{project_name}.json` with this structure:
+```json
+{
+  "project_name": "{project_name}",
+  "timestamp": "{ISO 8601 timestamp}",
+  "criteria": {
+    "{criterion_name}": { "status": "found|missing|skipped", "evidence": "..." }
+  }
+}
+```
+This JSON file serves as the grounding reference for future evaluations.
 
 ### HTML Template
 
@@ -337,7 +379,7 @@ The HTML report MUST use this structure with inline CSS. Replace all `{placehold
   }
   .description {
     font-size: 0.9rem;
-    color: #666;
+    color: #999;
     margin-bottom: 24px;
   }
 
@@ -368,9 +410,9 @@ The HTML report MUST use this structure with inline CSS. Replace all `{placehold
   .level-label .pct { color: #ccc; }
   .level-label .name { color: #888; }
 
-  .l1 { background: #2d8a4e; }
+  .l1 { background: #1a6b3a; }
   .l2 { background: #2d8a4e; }
-  .l3 { background: #2d8a4e; }
+  .l3 { background: #40a862; }
   .l4 { background: #d4a017; }
   .l5 { background: #333; }
 
@@ -400,9 +442,10 @@ The HTML report MUST use this structure with inline CSS. Replace all `{placehold
   }
   .col-header {
     font-size: 0.7rem;
+    font-weight: 400;
     letter-spacing: 2px;
     text-transform: uppercase;
-    color: #666;
+    color: #999;
     margin-bottom: 20px;
   }
   .highlight {
@@ -413,7 +456,7 @@ The HTML report MUST use this structure with inline CSS. Replace all `{placehold
     font-weight: 700;
     margin-bottom: 4px;
   }
-  .highlight-num.green { color: #e85d3a; }
+  .highlight-num.green { color: #4caf50; }
   .highlight-num.orange { color: #d4a017; }
   .highlight-title {
     font-size: 1rem;
@@ -437,7 +480,7 @@ The HTML report MUST use this structure with inline CSS. Replace all `{placehold
     font-size: 0.7rem;
     letter-spacing: 2px;
     text-transform: uppercase;
-    color: #666;
+    color: #999;
     margin-bottom: 24px;
   }
   .pillar-group { margin-bottom: 32px; }
@@ -456,7 +499,7 @@ The HTML report MUST use this structure with inline CSS. Replace all `{placehold
   }
   .pillar-score {
     font-size: 0.85rem;
-    color: #888;
+    color: #999;
     font-family: monospace;
   }
   .criterion-row {
@@ -481,83 +524,101 @@ The HTML report MUST use this structure with inline CSS. Replace all `{placehold
     text-align: center;
   }
   .criterion-evidence {
-    color: #777;
+    color: #999;
     line-height: 1.4;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+
+  @media (max-width: 768px) {
+    body { padding: 20px 16px; }
+    h1 { font-size: 2rem; }
+    .columns { grid-template-columns: 1fr; gap: 32px; }
+    .criterion-row {
+      grid-template-columns: 24px 1fr;
+      gap: 8px;
+    }
+    .criterion-score { text-align: left; }
+    .criterion-evidence { grid-column: 1 / -1; padding-left: 32px; }
+    .level-labels { font-size: 0.65rem; }
   }
 </style>
 </head>
 <body>
 
-<!-- HEADER -->
-<h1>{project_name} <span class="badge">{language}</span></h1>
-<p class="meta">{repo_path}&nbsp;&nbsp;&nbsp;PASS RATE {pass_rate}%</p>
-<p class="description">{project_description}</p>
+<header>
+  <h1>{project_name} <span class="badge">{language}</span></h1>
+  <p class="meta">{repo_path}&nbsp;&nbsp;&nbsp;PASS RATE {pass_rate}%</p>
+  <p class="description">{project_description}</p>
+</header>
 
-<!-- LEVEL PROGRESS BAR -->
-<div class="level-bar">
-  <div class="level-segment l1" style="width:20%"></div>
-  <div class="level-segment l2" style="width:20%"></div>
-  <div class="level-segment l3" style="width:20%"></div>
-  <div class="level-segment l4" style="width:20%"></div>
-  <div class="level-segment l5" style="width:20%"></div>
-</div>
-<div class="level-labels">
-  <div class="level-label" style="width:20%"><span class="pct">{l1_pct}%</span>&nbsp;<span class="name">L1</span></div>
-  <div class="level-label" style="width:20%"><span class="pct">{l2_pct}%</span>&nbsp;<span class="name">L2</span></div>
-  <div class="level-label" style="width:20%"><span class="pct">{l3_pct}%</span>&nbsp;<span class="name">L3</span></div>
-  <div class="level-label" style="width:20%"><span class="pct">{l4_pct}%</span>&nbsp;<span class="name">L4</span></div>
-  <div class="level-label" style="width:20%"><span class="pct">{l5_pct}%</span>&nbsp;<span class="name">L5</span></div>
-</div>
-
-<!-- SUMMARY -->
-<div class="summary-section">
-  <h2>{summary_headline}</h2>
-  <p>{summary_text}</p>
-
-  <div class="columns">
-    <div>
-      <div class="col-header">STRENGTHS</div>
-      <!-- Repeat for each strength (top 3) -->
-      <div class="highlight">
-        <div class="highlight-num green">01</div>
-        <div class="highlight-title">{strength_1_title}</div>
-        <div class="highlight-detail">{strength_1_detail}</div>
-      </div>
-      <!-- 02, 03 ... -->
-    </div>
-    <div>
-      <div class="col-header">OPPORTUNITIES</div>
-      <!-- Repeat for each opportunity (top 3) -->
-      <div class="highlight">
-        <div class="highlight-num orange">01</div>
-        <div class="highlight-title">{opportunity_1_title}</div>
-        <div class="highlight-detail">{opportunity_1_detail}</div>
-      </div>
-      <!-- 02, 03 ... -->
-    </div>
+<main>
+  <!-- LEVEL PROGRESS BAR -->
+  <div class="level-bar" role="progressbar" aria-valuenow="{maturity_level}" aria-valuemin="1" aria-valuemax="5" aria-label="Maturity level {maturity_level} of 5">
+    <div class="level-segment l1" style="width:{l1_weight}%"></div>
+    <div class="level-segment l2" style="width:{l2_weight}%"></div>
+    <div class="level-segment l3" style="width:{l3_weight}%"></div>
+    <div class="level-segment l4" style="width:{l4_weight}%"></div>
+    <div class="level-segment l5" style="width:{l5_weight}%"></div>
   </div>
-</div>
-
-<!-- ALL CRITERIA -->
-<div class="criteria-section">
-  <div class="criteria-header">ALL CRITERIA</div>
-
-  <!-- Repeat for each pillar (9 total) -->
-  <div class="pillar-group">
-    <div class="pillar-header">
-      <span class="pillar-name">{pillar_name}</span>
-      <span class="pillar-score">{passed}/{total} ({percentage}%)</span>
-    </div>
-
-    <!-- Repeat for each criterion in this pillar, alphabetically by name -->
-    <div class="criterion-row">
-      <span class="status-icon {pass|fail|skip}">{✓|✗|—}</span>
-      <span class="criterion-name">{criterion_name}</span>
-      <span class="criterion-score">{1/1|0/1|—/—}</span>
-      <span class="criterion-evidence">{evidence_text}</span>
-    </div>
+  <div class="level-labels" aria-hidden="true">
+    <div class="level-label" style="width:{l1_weight}%"><span class="pct">{l1_pct}%</span>&nbsp;<span class="name">L1</span></div>
+    <div class="level-label" style="width:{l2_weight}%"><span class="pct">{l2_pct}%</span>&nbsp;<span class="name">L2</span></div>
+    <div class="level-label" style="width:{l3_weight}%"><span class="pct">{l3_pct}%</span>&nbsp;<span class="name">L3</span></div>
+    <div class="level-label" style="width:{l4_weight}%"><span class="pct">{l4_pct}%</span>&nbsp;<span class="name">L4</span></div>
+    <div class="level-label" style="width:{l5_weight}%"><span class="pct">{l5_pct}%</span>&nbsp;<span class="name">L5</span></div>
   </div>
-</div>
+
+  <!-- SUMMARY -->
+  <section class="summary-section">
+    <h2>{summary_headline}</h2>
+    <p>{summary_text}</p>
+
+    <div class="columns">
+      <div>
+        <h3 class="col-header">STRENGTHS</h3>
+        <!-- Repeat for each strength (top 3) -->
+        <article class="highlight">
+          <div class="highlight-num green">01</div>
+          <div class="highlight-title">{strength_1_title}</div>
+          <div class="highlight-detail">{strength_1_detail}</div>
+        </article>
+        <!-- 02, 03 ... -->
+      </div>
+      <div>
+        <h3 class="col-header">OPPORTUNITIES</h3>
+        <!-- Repeat for each opportunity (top 3) -->
+        <article class="highlight">
+          <div class="highlight-num orange">01</div>
+          <div class="highlight-title">{opportunity_1_title}</div>
+          <div class="highlight-detail">{opportunity_1_detail}</div>
+        </article>
+        <!-- 02, 03 ... -->
+      </div>
+    </div>
+  </section>
+
+  <!-- ALL CRITERIA -->
+  <section class="criteria-section">
+    <h2 class="criteria-header">ALL CRITERIA</h2>
+
+    <!-- Repeat for each pillar (9 total) -->
+    <section class="pillar-group">
+      <div class="pillar-header">
+        <span class="pillar-name">{pillar_name}</span>
+        <span class="pillar-score">{passed}/{total} ({percentage}%)</span>
+      </div>
+
+      <!-- Repeat for each criterion in this pillar, alphabetically by name -->
+      <div class="criterion-row">
+        <span class="status-icon {pass|fail|skip}" aria-label="{pass: Passed|fail: Failed|skip: Skipped}">{✓|✗|—}</span>
+        <span class="criterion-name">{criterion_name}</span>
+        <span class="criterion-score">{1/1|0/1|—/—}</span>
+        <span class="criterion-evidence">{evidence_text}</span>
+      </div>
+    </section>
+  </section>
+</main>
 
 </body>
 </html>

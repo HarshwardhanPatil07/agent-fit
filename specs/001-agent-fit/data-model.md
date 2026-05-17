@@ -105,6 +105,7 @@ The top-level output entity.
 - issue_labeling_system, backlog_health
 - fast_ci_feedback, release_automation, release_notes_automation
 - unused_deps_detection
+- heavy_dependency_detection 
 
 ### Level 4: Optimized
 - n_plus_one_detection
@@ -117,13 +118,14 @@ The top-level output entity.
 - error_tracking_contextualized, profiling_instrumentation
 - circuit_breakers, runbooks_documented
 - pii_handling
+- dast_scanning 
+- privacy_compliance 
 
 ### Level 5: Autonomous
-- dead_feature_flag_detection, heavy_dependency_detection
+- dead_feature_flag_detection
 - progressive_rollout, rollback_automation, version_drift_detection
 - product_analytics_instrumentation
 - error_to_insight_pipeline, experiment_infrastructure
-- dast_scanning, privacy_compliance
 
 ## Relationships
 
