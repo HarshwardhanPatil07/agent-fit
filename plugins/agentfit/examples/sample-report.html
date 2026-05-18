@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>sample-project — Agent Fit Report</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #0d0d1a; color: #e0e0e0; padding: 20px; }
+    .controls { display: flex; gap: 8px; margin: 14px 0; flex-wrap: wrap; }
+    .controls button, .controls select, .controls input { background: #111626; color: #ddd; border: 1px solid #2b2f42; border-radius: 6px; padding: 6px 10px; }
+    .controls button.active { border-color: #4caf50; color: #4caf50; }
+    .pillar-header { cursor: pointer; font-weight: bold; margin-top: 10px; }
+    .pillar-group.collapsed .criterion-row { display: none; }
+    .criterion-row { display: grid; grid-template-columns: 80px 180px 1fr; gap: 8px; padding: 4px 0; }
+    .criterion-row.changed { border-left: 2px solid #d4a017; padding-left: 6px; background: rgba(212, 160, 23, 0.12); }
+    footer { margin-top: 20px; border-top: 1px solid #1a1a2e; padding-top: 10px; color: #999; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <h1>sample-project <small>TypeScript</small></h1>
+  <div>Pass rate: 67% <span>(+5%)</span></div>
+
+  <div class="controls">
+    <button class="filter-btn active" data-status="all">Show All</button>
+    <button class="filter-btn" data-status="found">Found</button>
+    <button class="filter-btn" data-status="missing">Missing</button>
+    <button class="filter-btn" data-status="skipped">Skipped</button>
+    <input id="criteria-search" placeholder="Search criteria by name">
+    <select id="level-filter">
+      <option value="all">All Levels</option>
+      <option value="1">Level 1</option>
+      <option value="2">Level 2</option>
+      <option value="3">Level 3</option>
+    </select>
+  </div>
+
+  <section class="pillar-group">
+    <div class="pillar-header">Style & Validation (8/13)</div>
+    <div class="criterion-row" data-status="found" data-level="1" data-name="formatter">
+      <span>✓</span><span>formatter</span><span>Found .prettierrc</span>
+    </div>
+    <div class="criterion-row changed" data-status="missing" data-level="2" data-name="pre_commit_hooks">
+      <span>✗</span><span>pre_commit_hooks</span><span>Changed from found to missing</span>
+    </div>
+  </section>
+
+  <footer>
+    <div>Assessed: 2026-05-18T12:00:00Z</div>
+    <div>Skill version: 1.0.0</div>
+    <div>Criteria evaluated: 76 | Skipped: 5</div>
+    <div>Git SHA: abc1234 | Duration: 32s</div>
+  </footer>
+
+  <script>
+    (() => {
+      const rows = Array.from(document.querySelectorAll('.criterion-row'));
+      const groups = Array.from(document.querySelectorAll('.pillar-group'));
+      const buttons = Array.from(document.querySelectorAll('.filter-btn'));
+      const search = document.getElementById('criteria-search');
+      const level = document.getElementById('level-filter');
+      let status = 'all';
+      const apply = () => {
+        rows.forEach((row) => {
+          const statusMatch = status === 'all' || row.dataset.status === status;
+          const levelMatch = level.value === 'all' || row.dataset.level === level.value;
+          const query = (search.value || '').toLowerCase();
+          const queryMatch = !query || row.dataset.name.includes(query);
+          row.style.display = statusMatch && levelMatch && queryMatch ? '' : 'none';
+        });
+      };
+      buttons.forEach((btn) => btn.addEventListener('click', () => {
+        status = btn.dataset.status;
+        buttons.forEach((b) => b.classList.toggle('active', b === btn));
+        apply();
+      }));
+      search.addEventListener('input', apply);
+      level.addEventListener('change', apply);
+      groups.forEach((group) => group.querySelector('.pillar-header').addEventListener('click', () => group.classList.toggle('collapsed')));
+    })();
+  </script>
+</body>
+</html>

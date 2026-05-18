@@ -1,0 +1,35 @@
+---
+description: Project Development Guidelines
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# agent-fit Development Guidelines
+
+Auto-generated from all feature plans. Last updated: 2026-05-18
+
+## Active Technologies
+
+- Markdown command spec with inline HTML/CSS/JavaScript template + None for end users; existing shell tools (`git`) and optional `gh` usage remain unchanged (002-assessment-output-consumability)
+
+## Project Structure
+
+```text
+src/
+tests/
+```
+
+## Commands
+
+npm test && npm run lint
+
+## Code Style
+
+Markdown command spec with inline HTML/CSS/JavaScript template: Follow standard conventions
+
+## Recent Changes
+
+- 002-assessment-output-consumability: Added Markdown command spec with inline HTML/CSS/JavaScript template + None for end users; existing shell tools (`git`) and optional `gh` usage remain unchanged
+
+<!-- MANUAL ADDITIONS START -->
+<!-- MANUAL ADDITIONS END -->

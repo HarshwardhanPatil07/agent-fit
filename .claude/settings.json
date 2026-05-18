@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": []
+  },
+  "env": {},
+  "hooks": {},
+  "extraKnownMarketplaces": {
+    "agent-fit": {
+      "source": {
+        "source": "git",
+        "url": "git@github.com:HarshwardhanPatil07/agent-fit.git"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "agentfit@agent-fit": true
+  }
+}

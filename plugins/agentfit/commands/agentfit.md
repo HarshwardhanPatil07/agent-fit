@@ -2,7 +2,7 @@
 description: Evaluates codebase agent-readiness across 9 pillars, 80+ criteria, and 5 maturity levels — produces an HTML report with pass rate scoring
 ---
 
-When invoked, perform the following assessment. This is a READ-ONLY analysis — do NOT modify any files in the target codebase. The only file you create is the HTML report.
+When invoked, perform the following assessment. This is a READ-ONLY analysis — do NOT modify any files in the target codebase. The only files you create are the HTML report and its JSON sidecar.
 
 ## Step 1: Discover Project Context
 
@@ -32,6 +32,7 @@ If a previous report exists at `/tmp/agentfit-report-{project_name}.json`, load 
 - In the evidence field, note when a status changed from the previous report: "Changed from missing → found: [reason]"
 
 If no previous report exists, evaluate all criteria fresh.
+If the previous report exists but is unreadable or malformed JSON, continue with fresh evaluation, note baseline unavailability in the report metadata/delta section, and do not fail the assessment run.
 
 ## Step 2: Evaluate All Criteria
 
@@ -310,8 +311,14 @@ Generate a short headline based on the strongest pillar or most notable pattern.
 - "Well-Documented" (if Documentation pillar is highest)
 - "Security-First" (if Security pillar is highest)
 - "Needs Foundation" (if Level 1 criteria are failing)
+- "Automation Momentum" (if CI/release pillars are improving)
+- "Observability Upgrade" (if monitoring criteria are strongest)
+- "Quality Controls Solid" (if style/testing balance is strong)
+- "Governance Gaps Remain" (if security/governance lags)
+- "Platform Maturing" (if L2/L3 nearing gate)
+- "Readiness Improving" (if delta is positive but gates still blocked)
 
-Then write a 1-2 sentence summary: "{project_name} reaches Level {N} with {pass_rate}% pass rate. Currently reaching {maturity_label} grade with {total_passed}/{total_applicable} criteria passing ({pass_rate}%). Key areas for improvement include the opportunities listed below."
+Then write a 1-2 sentence summary: "{project_name} reaches Level {N} ({maturity_label}) with {total_passed}/{total_applicable} criteria passing. Key areas for improvement include the opportunities listed below."
 
 ## Step 4: Generate HTML Report
 
@@ -325,13 +332,55 @@ Also write the assessment data as JSON to `/tmp/agentfit-report-{project_name}.j
 ```json
 {
   "project_name": "{project_name}",
-  "timestamp": "{ISO 8601 timestamp}",
-  "criteria": {
-    "{criterion_name}": { "status": "found|missing|skipped", "evidence": "..." }
-  }
+  "language": "{language}",
+  "repo_path": "{repo_path}",
+  "pass_rate": 0,
+  "maturity_level": 0,
+  "maturity_label": "{maturity_label}",
+  "summary_headline": "{summary_headline}",
+  "summary_text": "{summary_text}",
+  "metadata": {
+    "assessed_at": "{ISO 8601 timestamp}",
+    "skill_version": "{plugin_version}",
+    "criteria_evaluated": 0,
+    "criteria_skipped": 0,
+    "git_sha": "{git_sha}",
+    "assessment_duration_seconds": 0
+  },
+  "delta": {
+    "baseline_found": true,
+    "baseline_path": "/tmp/agentfit-report-{project_name}.json",
+    "pass_rate_previous": 0,
+    "pass_rate_current": 0,
+    "pass_rate_delta": 0,
+    "changed_criteria_count": 0
+  },
+  "pillars": [
+    {
+      "name": "{pillar_name}",
+      "criteria_passed": 0,
+      "criteria_total": 0,
+      "percentage": 0,
+      "criteria": [
+        {
+          "name": "{criterion_name}",
+          "status": "found|missing|skipped",
+          "score": "1/1|0/1|—/—",
+          "evidence": "...",
+          "level": 1,
+          "status_changed": false,
+          "previous_status": "found|missing|skipped|null"
+        }
+      ]
+    }
+  ],
+  "strengths": [],
+  "opportunities": [],
+  "level_progress": [],
+  "level_gate_status": []
 }
 ```
-This JSON file serves as the grounding reference for future evaluations.
+This JSON file serves as the grounding reference for future evaluations and MUST be written on every successful run alongside the HTML report.
 
 ### HTML Template
 
@@ -529,6 +578,55 @@ The HTML report MUST use this structure with inline CSS. Replace all `{placehold
     word-wrap: break-word;
     overflow-wrap: break-word;
   }
+  .criterion-row.changed {
+    background: rgba(212, 160, 23, 0.12);
+    border-left: 2px solid #d4a017;
+    padding-left: 8px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 18px;
+    align-items: center;
+  }
+  .controls input,
+  .controls select,
+  .controls button {
+    background: #111626;
+    color: #ddd;
+    border: 1px solid #2b2f42;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 0.78rem;
+  }
+  .controls button.active {
+    border-color: #4caf50;
+    color: #4caf50;
+  }
+  .pillar-header.toggle {
+    cursor: pointer;
+  }
+  .pillar-group.collapsed .criterion-row {
+    display: none;
+  }
+  .delta-chip {
+    font-family: monospace;
+    font-size: 0.78rem;
+    color: #d4a017;
+    margin-left: 8px;
+  }
+  footer {
+    margin-top: 28px;
+    border-top: 1px solid #1a1a2e;
+    padding-top: 16px;
+    color: #888;
+    font-size: 0.78rem;
+    font-family: monospace;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 8px;
+  }
 
   @media (max-width: 768px) {
     body { padding: 20px 16px; }
@@ -541,6 +639,7 @@ The HTML report MUST use this structure with inline CSS. Replace all `{placehold
     .criterion-score { text-align: left; }
     .criterion-evidence { grid-column: 1 / -1; padding-left: 32px; }
     .level-labels { font-size: 0.65rem; }
+    .controls { flex-direction: column; align-items: stretch; }
   }
 </style>
 </head>
@@ -571,7 +670,7 @@ The HTML report MUST use this structure with inline CSS. Replace all `{placehold
 
   <!-- SUMMARY -->
   <section class="summary-section">
-    <h2>{summary_headline}</h2>
+    <h2>{summary_headline}<span class="delta-chip">{pass_rate_delta_text}</span></h2>
     <p>{summary_text}</p>
 
     <div class="columns">
@@ -601,16 +700,31 @@ The HTML report MUST use this structure with inline CSS. Replace all `{placehold
   <!-- ALL CRITERIA -->
   <section class="criteria-section">
     <h2 class="criteria-header">ALL CRITERIA</h2>
+    <div class="controls">
+      <button type="button" class="filter-btn active" data-status="all">Show All</button>
+      <button type="button" class="filter-btn" data-status="found">Found</button>
+      <button type="button" class="filter-btn" data-status="missing">Missing</button>
+      <button type="button" class="filter-btn" data-status="skipped">Skipped</button>
+      <input id="criteria-search" type="search" placeholder="Search criteria by name">
+      <select id="level-filter">
+        <option value="all">All Levels</option>
+        <option value="1">Level 1</option>
+        <option value="2">Level 2</option>
+        <option value="3">Level 3</option>
+        <option value="4">Level 4</option>
+        <option value="5">Level 5</option>
+      </select>
+    </div>
 
     <!-- Repeat for each pillar (9 total) -->
     <section class="pillar-group">
-      <div class="pillar-header">
+      <div class="pillar-header toggle" role="button" tabindex="0" aria-expanded="true">
         <span class="pillar-name">{pillar_name}</span>
         <span class="pillar-score">{passed}/{total} ({percentage}%)</span>
       </div>
 
       <!-- Repeat for each criterion in this pillar, alphabetically by name -->
-      <div class="criterion-row">
+      <div class="criterion-row {changed_class}" data-status="{found|missing|skipped}" data-level="{level}" data-name="{criterion_name}">
         <span class="status-icon {pass|fail|skip}" aria-label="{pass: Passed|fail: Failed|skip: Skipped}">{✓|✗|—}</span>
         <span class="criterion-name">{criterion_name}</span>
         <span class="criterion-score">{1/1|0/1|—/—}</span>
@@ -619,6 +733,84 @@ The HTML report MUST use this structure with inline CSS. Replace all `{placehold
     </section>
   </section>
 </main>
+
+<footer>
+  <div>Assessed: {assessment_date}</div>
+  <div>Skill version: {plugin_version}</div>
+  <div>Criteria evaluated: {total_applicable}</div>
+  <div>Criteria skipped: {criteria_skipped}</div>
+  <div>Git SHA: {git_sha}</div>
+  <div>Duration: {assessment_duration}</div>
+</footer>
+
+<script>
+(() => {
+  const buttons = Array.from(document.querySelectorAll('.filter-btn'));
+  const searchInput = document.getElementById('criteria-search');
+  const levelSelect = document.getElementById('level-filter');
+  const rows = Array.from(document.querySelectorAll('.criterion-row'));
+  const groups = Array.from(document.querySelectorAll('.pillar-group'));
+  let statusFilter = 'all';
+
+  const applyFilters = () => {
+    let visibleCount = 0;
+    rows.forEach((row) => {
+      const matchesStatus = statusFilter === 'all' || row.dataset.status === statusFilter;
+      const matchesLevel = levelSelect.value === 'all' || row.dataset.level === levelSelect.value;
+      const query = (searchInput.value || '').trim().toLowerCase();
+      const matchesQuery = !query || (row.dataset.name || '').toLowerCase().includes(query);
+      const visible = matchesStatus && matchesLevel && matchesQuery;
+      row.style.display = visible ? '' : 'none';
+      if (visible) visibleCount += 1;
+    });
+    groups.forEach((group) => {
+      const anyVisible = Array.from(group.querySelectorAll('.criterion-row')).some((row) => row.style.display !== 'none');
+      group.style.display = anyVisible ? '' : 'none';
+    });
+    const emptyId = 'criteria-empty-state';
+    let empty = document.getElementById(emptyId);
+    if (!empty) {
+      empty = document.createElement('div');
+      empty.id = emptyId;
+      empty.style.color = '#777';
+      empty.style.fontFamily = 'monospace';
+      empty.style.fontSize = '0.78rem';
+      empty.style.marginTop = '10px';
+      empty.textContent = 'No criteria match the current filters.';
+      document.querySelector('.criteria-section').appendChild(empty);
+    }
+    empty.style.display = visibleCount === 0 ? '' : 'none';
+  };
+
+  buttons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      statusFilter = btn.dataset.status || 'all';
+      buttons.forEach((b) => b.classList.toggle('active', b === btn));
+      applyFilters();
+    });
+  });
+  searchInput.addEventListener('input', applyFilters);
+  levelSelect.addEventListener('change', applyFilters);
+
+  groups.forEach((group) => {
+    const header = group.querySelector('.pillar-header.toggle');
+    if (!header) return;
+    const toggle = () => {
+      const collapsed = group.classList.toggle('collapsed');
+      header.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    };
+    header.addEventListener('click', toggle);
+    header.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        toggle();
+      }
+    });
+  });
+
+  applyFilters();
+})();
+</script>
 
 </body>
 </html>
@@ -634,6 +826,7 @@ After opening the HTML report, print a brief summary to the console:
 Agent Fit Report: {project_name}
 Pass Rate: {pass_rate}% | Level: L{maturity_level} ({maturity_label})
 Report: /tmp/agentfit-report-{project_name}.html
+JSON: /tmp/agentfit-report-{project_name}.json
 
 Pillars:
   Style & Validation:       {p1_passed}/{p1_total} ({p1_pct}%)
@@ -645,4 +838,16 @@ Pillars:
   Security & Governance:    {p7_passed}/{p7_total} ({p7_pct}%)
   Task Discovery:           {p8_passed}/{p8_total} ({p8_pct}%)
   Product & Analytics:      {p9_passed}/{p9_total} ({p9_pct}%)
+
+Levels:
+  L1 Functional:            {l1_pct}% {l1_gate_symbol} (gate: 80%)
+  L2 Documented:            {l2_pct}% {l2_gate_symbol} (gate: 80%)
+  L3 Standardized:          {l3_pct}% {l3_gate_symbol}
+  L4 Optimized:             {l4_pct}% {l4_gate_symbol}
+  L5 Autonomous:            {l5_pct}% {l5_gate_symbol}
 ```
+
+Where symbols are:
+- `✓` when that level gate is passed
+- `✗` when the level was evaluated but below the 80% gate
+- `— (blocked by L{n})` when a previous level gate is not yet passed
