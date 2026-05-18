@@ -22,6 +22,11 @@ When invoked, perform the following assessment. This is a READ-ONLY analysis —
 3. Extract project name: use the current directory name.
 4. Extract repo path: run `git remote get-url origin 2>/dev/null` and parse `org/repo` from the URL. If no git remote, use the directory path.
 5. Get a short project description from README.md first line/paragraph if available.
+6. Detect if the repository is a fork:
+   - Run `gh api repos/{owner}/{repo} --jq '.fork' 2>/dev/null`
+   - If `true`, extract upstream via `gh api repos/{owner}/{repo} --jq '.parent.full_name' 2>/dev/null`
+   - Record `is_fork: true/false` and `upstream_repo` if applicable
+   - When fork is detected: for GitHub API criteria (`branch_protection`, `secret_scanning`, `backlog_health`, `issue_labeling_system`), evaluate against the upstream repo instead, or skip with evidence "Fork detected; criterion evaluated against upstream {upstream_repo}"
 
 ### Grounding on Previous Reports
 
@@ -60,6 +65,9 @@ Before evaluating criteria, detect the project type to determine which skip rule
 - **CLI tool**: Check if `package.json` has a `bin` field, or `cmd/` directory exists (Go), or `[[bin]]` in `Cargo.toml`, or `entry_points.console_scripts` in Python config.
 - **Web app**: Check for frontend frameworks (Next.js, React, Vue, Angular, Svelte) in dependencies, or `index.html`, or web server routes.
 - **API service**: Check for HTTP server frameworks (Express, Gin, FastAPI, Actix, Flask) without frontend assets.
+- **Kubernetes operator**: Check for `controller-runtime` or `operator-sdk` in go.mod, CRD manifests in `config/crd/` or `install/`, OWNERS files at root, `.ci-operator.yaml`, or `kubebuilder` markers in source. If found, mark as k8s-operator.
+- **Mobile app**: Check for `ios/` or `android/` directories, `Podfile`, `build.gradle` with Android SDK, `*.xcodeproj`, or Flutter `pubspec.yaml`. If found, mark as mobile.
+- **Infrastructure/IaC**: Check for `*.tf` files (Terraform), `Pulumi.yaml`, CloudFormation templates, or Ansible playbooks as the primary project type. If found, mark as iac.
 
 Record the detected project type. A project may match multiple types (e.g., monorepo + web app).
 
@@ -77,6 +85,12 @@ Skip a criterion (mark as `—/—`) when:
 - It checks for dead feature flags (`dead_feature_flag_detection`) but no feature flag system is detected
 - It checks for product analytics (`product_analytics_instrumentation`) but the project is a library, CLI tool, or server infrastructure
 - It checks for bundle size (`heavy_dependency_detection`) but the project is not a frontend/bundled project
+- It checks for `devcontainer`/`env_template`/`local_services_setup` but the project is a Kubernetes operator (operators need a cluster, not docker-compose; substitute: check for envtest config, kind/minikube setup scripts, or e2e cluster provisioning in Makefile/hack/)
+- It checks for `circuit_breakers` but the project is a Kubernetes operator (client-go provides built-in retry/backoff via informers and work queues)
+- It checks for `error_tracking_contextualized` (Sentry) but the project is a Kubernetes operator or CLI tool (operators report errors via k8s Conditions and Events; CLI tools report errors to stderr)
+- It checks for `secrets_management` (Vault/SOPS) but the project is a Kubernetes operator (operators manage secrets via k8s Secrets API, not external vaults)
+- It checks for `health_checks`/`alerting_configured`/`metrics_collection`/`deployment_observability`/`distributed_tracing` but the project is a CLI tool (CLI tools are invoked on-demand, not long-running services)
+- It checks for `progressive_rollout`/`rollback_automation` but the project is a CLI tool or IaC project (these are distributed via package managers, not deployed as services)
 
 When skipping, always explain why in the evidence field.
 
@@ -96,7 +110,7 @@ Evaluate each criterion. For all config-parsing criteria, read the actual config
 
 6. **naming_consistency** (config_parsing + doc_content) — Check for: ESLint `naming-convention` rule, `revive` linter naming rules in golangci-lint, documented naming conventions in AGENTS.md/CLAUDE.md/CONTRIBUTING.md, `.editorconfig`. FOUND if naming conventions are documented or enforced via linter.
 
-7. **large_file_detection** (file_existence) — Check for: `.gitattributes` with LFS entries, `pre-commit` hook `check-added-large-files`, CI jobs checking file size. FOUND if large file detection is configured.
+7. **large_file_detection** (file_existence) — Check for: `.gitattributes` with Git LFS `filter=lfs` entries (not `linguist-generated` or `linguist-vendored` markers, which are for GitHub language stats), `pre-commit` hook `check-added-large-files`, CI jobs checking file size. FOUND if large file detection is configured.
 
 8. **code_modularization** (config_parsing) — Check for: Go `internal/` packages, `eslint-plugin-boundaries`, Nx boundaries config, Rust module visibility, monorepo workspace boundaries. FOUND if module boundary enforcement exists.
 
@@ -116,21 +130,21 @@ Evaluate each criterion. For all config-parsing criteria, read the actual config
 
 2. **deps_pinned** (file_existence) — Check for: `go.sum`, `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `uv.lock`, `poetry.lock`, `Cargo.lock`, `Pipfile.lock`, `gradle.lockfile` or `buildSrc/*.lock`, `mix.lock` (Elixir). FOUND if lockfile exists. Note: Rust libraries intentionally gitignore Cargo.lock — skip for Rust library projects. Note: Maven/Gradle projects often pin versions in POM/build files directly — check for version pinning in `pom.xml` or `build.gradle` if no lockfile.
 
-3. **vcs_cli_tools** (doc_content + file_existence) — Check for: VCS workflow tooling documented in Makefile, CONTRIBUTING.md, or README.md (e.g., PR creation commands, branch policies), OR `.github/workflows/*.yml` referencing `gh` CLI commands. FOUND if VCS tooling usage is documented or automated in CI.
+3. **vcs_cli_tools** (doc_content + file_existence) — Check for: VCS workflow tooling documented in Makefile, CONTRIBUTING.md, or README.md (e.g., PR creation commands, branch policies), OR `.github/workflows/*.yml` referencing `gh` CLI commands, OR Prow OWNERS files with documented `/lgtm`, `/approve` workflow, OR `.gitlab-ci.yml` with merge request automation. FOUND if VCS tooling usage is documented or automated in CI.
 
 4. **single_command_setup** (doc_content) — Check README.md, AGENTS.md, CONTRIBUTING.md for a code block with a single setup command (e.g., `make setup`, `task setup`, `just setup`, `earthly +setup`, `docker-compose up`, `npm install`, `nix develop`, `./dev doctor`) that completes project setup (not a multi-step procedure). FOUND if a single setup command is documented in a code block. Evidence must quote the command found.
 
-5. **fast_ci_feedback** (ci_workflow) — Read `.github/workflows/*.yml`. FOUND if CI workflow uses caching (actions/cache, turbo, sccache, or language-specific caching) AND does not include matrix > 5 targets without parallelization. Evidence must cite specific caching actions and matrix size found.
+5. **fast_ci_feedback** (ci_workflow) — Read CI config files: `.github/workflows/*.yml`, `.gitlab-ci.yml`, `.circleci/config.yml`, `.buildkite/pipeline.yml`, `Jenkinsfile`, `.ci-operator.yaml`. FOUND if CI uses caching (actions/cache, turbo, sccache, `Cache@2` in Azure Pipelines, or language-specific caching) AND does not include matrix > 5 targets without parallelization. Evidence must cite specific caching actions and matrix size found.
 
 6. **deployment_frequency** (git_history) — Run `git tag --sort=-creatordate | head -20` and check dates. FOUND if multiple releases per month or regular release cadence visible.
 
-7. **release_automation** (ci_workflow) — Check for: `.github/workflows/release*`, `goreleaser.yml`, `.releaserc` or `release.config.*` (semantic-release), `release-please-config.json` (release-please), `cargo-release` config, publish workflows, tag-triggered release workflows. FOUND if releases are automated via CI.
+7. **release_automation** (ci_workflow) — Check for: `.github/workflows/release*`, `goreleaser.yml`, `.releaserc` or `release.config.*` (semantic-release), `release-please-config.json` (release-please), `cargo-release` config, publish workflows, tag-triggered release workflows, `.ci-operator.yaml` with release pipeline config, `.gitlab-ci.yml` with deploy stages. FOUND if releases are automated via CI.
 
 8. **release_notes_automation** (config_parsing) — Check for: `.goreleaser.yml` with changelog, `towncrier.toml`, `.changeset/`, `git-cliff.toml`, `cliff.toml`, release-changelog-builder action in CI, `release-please-config.json`, `.releaserc` with changelog plugin. FOUND if release notes are auto-generated.
 
 9. **automated_pr_review** (ci_workflow + code_search) — Check for: CodeRabbit, Copilot Code Review, Danger.js, custom review bots in CI, Semgrep in PR checks, CodeAnt AI, Graphite Reviewer, Sourcery, `claude-code` review in CI. FOUND if automated review comments are generated on PRs.
 
-10. **agentic_development** (git_history) — Run `git log --format="%aN" -100 2>/dev/null` and check for agent co-author signatures (Claude, Copilot, factory-droid, Devin, Sweep). FOUND if agent co-authorship is visible in recent git history. Note: file-existence checks for AGENTS.md and .claude/skills/ are already covered by the `agents_md` and `skills` criteria in Pillar 4 — this criterion only checks the unique signal of agents actively contributing code.
+10. **agentic_development** (git_history) — Run `git log --format="%aN" -100 2>/dev/null` and check for `Co-authored-by:` trailers or author names matching: Claude, Copilot, factory-droid, Devin, Sweep, cursor-bot. Merge bots (`dependabot`, `renovate-bot`, `openshift-merge-bot`) do NOT count as agentic development — they are automation, not AI coding agents. FOUND if agent co-authorship is visible in recent git history. Note: file-existence checks for AGENTS.md and .claude/skills/ are already covered by the `agents_md` and `skills` criteria in Pillar 4 — this criterion only checks the unique signal of agents actively contributing code.
 
 11. **feature_flag_infrastructure** (config_parsing + dependency_check) — Check for: LaunchDarkly, Statsig, Unleash, custom feature flag config files, `crates/feature_flags`. FOUND if feature flag system is configured.
 
@@ -174,9 +188,9 @@ Evaluate each criterion. For all config-parsing criteria, read the actual config
 
 2. **agents_md** (file_existence) — Check for: `AGENTS.md` or `CLAUDE.md` at root documenting commands, conventions, and build steps for agents. FOUND if agent instructions file exists.
 
-3. **agents_md_validation** (ci_workflow) — Check CI workflows for jobs that validate commands documented in AGENTS.md still work. FOUND if CI validates agent instructions.
+3. **agents_md_validation** (ci_workflow) — Check any CI config (GitHub Actions, GitLab CI, Azure Pipelines, Prow, etc.) for jobs that validate agent instructions documented in AGENTS.md. FOUND if CI validates agent instructions.
 
-4. **documentation_freshness** (git_history) — Run `git log -1 --format="%ci" -- README.md AGENTS.md CLAUDE.md CONTRIBUTING.md 2>/dev/null` and check if any key doc was modified within 180 days. FOUND if docs are fresh.
+4. **documentation_freshness** (git_history) — Run `git log -1 --format="%ci" -- README.md AGENTS.md CLAUDE.md CONTRIBUTING.md docs/ 2>/dev/null` and check if any key doc or `docs/` directory was modified within 180 days. FOUND if docs are fresh.
 
 5. **automated_doc_generation** (ci_workflow + config_parsing) — Check for: Sphinx conf.py, MkDocs config, Typedoc config, godoc generation in Makefile, `make docs` target, doc generation CI workflows. FOUND if docs are auto-generated from code.
 
@@ -196,7 +210,7 @@ Evaluate each criterion. For all config-parsing criteria, read the actual config
 
 2. **devcontainer_runnable** (config_parsing) — If devcontainer or Nix dev environment exists, check if it has a valid base image and features configured (devcontainer) or valid inputs and devShell output (Nix flake). SKIP if no devcontainer or Nix config. FOUND if dev environment appears buildable.
 
-3. **env_template** (file_existence) — Check for: `.env.example`, `.env.template`, `.envrc.example`, documented env vars in docs, `.tool-versions` (asdf), `.mise.toml` or `.mise/config.toml` (mise), `.nvmrc`, `.node-version`, `.python-version`, `.ruby-version`, `.go-version`. FOUND if env template or tool version pinning exists.
+3. **env_template** (file_existence) — Check for: `.env.example`, `.env.template`, `.envrc.example`, documented env vars in docs, `.tool-versions` (asdf), `.mise.toml` or `.mise/config.toml` (mise), `.nvmrc`, `.node-version`, `.python-version`, `.ruby-version`, `.go-version`. For Go projects, also accept Go version pinned in `go.mod`. For Kubernetes operators, accept envtest setup in Makefile (e.g., `setup-envtest` target). FOUND if env template or tool version pinning exists.
 
 4. **local_services_setup** (file_existence) — Check for: `docker-compose.yml` or `compose.yml` with service definitions (Postgres, Redis, etc.). FOUND if local services are containerized.
 
@@ -230,7 +244,7 @@ Evaluate each criterion. For all config-parsing criteria, read the actual config
 
 1. **branch_protection** (api_check) — Run `gh api repos/{owner}/{repo}/rulesets 2>/dev/null` or `gh api repos/{owner}/{repo}/branches/main/protection 2>/dev/null`. SKIP if gh unavailable. FOUND if branch protection rules exist.
 
-2. **codeowners** (file_existence) — Check for: `.github/CODEOWNERS`, `CODEOWNERS`, `docs/CODEOWNERS`. FOUND if CODEOWNERS file exists with team assignments.
+2. **codeowners** (file_existence) — Check for: `.github/CODEOWNERS`, `CODEOWNERS`, `docs/CODEOWNERS`, OR Prow OWNERS files at root with `approvers`/`reviewers` fields (Kubernetes ecosystem equivalent). FOUND if any code ownership file exists with team assignments.
 
 3. **secret_scanning** (api_check) — Run `gh api repos/{owner}/{repo} --jq '.security_and_analysis.secret_scanning.status' 2>/dev/null`. SKIP if gh unavailable or insufficient permissions. FOUND if secret scanning is enabled.
 
@@ -238,9 +252,9 @@ Evaluate each criterion. For all config-parsing criteria, read the actual config
 
 5. **dependency_update_automation** (file_existence) — Check for: `.github/dependabot.yml`, `renovate.json`, `renovate.json5`, `.renovaterc`. FOUND if dependency update bot is configured.
 
-6. **gitignore_comprehensive** (config_parsing) — Read `.gitignore` and check if it covers: `.env*`, credentials, `node_modules/` or equivalent, build artifacts, IDE configs (`.idea/`, `.vscode/`). FOUND if gitignore properly excludes sensitive files and artifacts.
+6. **gitignore_comprehensive** (config_parsing) — Read `.gitignore` and check if it covers language-appropriate patterns: Go: `_output/`, IDE configs (`.idea/`, `.vscode/`), `*.test` binaries; JS/TS: `.env*`, `node_modules/`, `dist/`, IDE configs; Python: `.env*`, `__pycache__/`, `*.egg-info/`, `.venv/`, IDE configs; Rust: `target/`, IDE configs. FOUND if gitignore covers build artifacts + IDE configs for the detected language. `.env*` only required for languages that use dotenv (JS/TS, Python, Ruby).
 
-7. **automated_security_review** (ci_workflow) — Check for: CodeQL analysis workflow, Snyk, Trivy, Semgrep, SAST pipeline steps in CI. FOUND if security scanning runs in CI.
+7. **automated_security_review** (ci_workflow) — Check for: CodeQL analysis workflow, Snyk, Trivy, Semgrep, SAST pipeline steps in CI, `gosec` linter enabled in `.golangci.yml` (Go SAST), security scanning steps in any CI config (not just GitHub Actions). FOUND if security scanning runs in CI.
 
 8. **log_scrubbing** (code_search) — Search for: redaction functions, `SafeValue` interfaces, password masking patterns, sanitization middleware, log field filtering. FOUND if sensitive data is redacted from logs.
 
@@ -258,7 +272,7 @@ Evaluate each criterion. For all config-parsing criteria, read the actual config
 
 1. **issue_templates** (file_existence) — Check for: `.github/ISSUE_TEMPLATE/` directory with template files, `.github/ISSUE_TEMPLATE.md`. FOUND if structured issue templates exist.
 
-2. **issue_labeling_system** (api_check) — Run `gh label list --limit 50 2>/dev/null` and check for organized label taxonomy (priority, type, area labels). SKIP if gh unavailable. FOUND if comprehensive labels exist.
+2. **issue_labeling_system** (api_check) — Run `gh label list --limit 50 2>/dev/null` and check for organized label taxonomy (priority, type, area labels). GitHub's 9 default labels (`bug`, `documentation`, `duplicate`, `enhancement`, `good first issue`, `help wanted`, `invalid`, `question`, `wontfix`) alone do NOT satisfy this criterion. FOUND only if custom labels beyond defaults exist (e.g., `priority/*`, `area/*`, `kind/*` labels). SKIP if gh unavailable.
 
 3. **backlog_health** (api_check) — Run `gh issue list --limit 20 --json title,labels 2>/dev/null`. Check if >70% of issues have labels and titles >10 chars. SKIP if gh unavailable. FOUND if backlog is well-maintained. Evidence must include counts: "Found X/Y issues with labels (Z%, threshold: 70%)".
 
@@ -340,9 +354,15 @@ Language-aware fix instructions — use the detected language to suggest the cor
 - **Java/Kotlin**: `checkstyle.xml`, `build.gradle` configs, JUnit, `pom.xml` settings
 - **C++**: `.clang-format`, `.clang-tidy`, `CMakeLists.txt` test targets, `CMakePresets.json`
 
+Architecture-aware fix instructions — use the detected project type to avoid suggesting irrelevant tooling:
+- **CLI tools**: Do not suggest health check endpoints, metrics collection, distributed tracing, alerting, or deployment observability. Suggest CLI-appropriate alternatives (e.g., `--version` flag, shell completion scripts, man pages).
+- **Kubernetes operators**: Do not suggest docker-compose, `.env` templates, Sentry, or external vault. Suggest k8s-native equivalents (e.g., envtest setup, k8s Conditions/Events for error reporting, k8s Secrets API).
+- **Libraries**: Do not suggest deployment, rollout, or service monitoring criteria. Focus on API docs, test coverage, and packaging.
+- **IaC projects**: Do not suggest progressive rollout or rollback automation for the project itself. Focus on validation, linting (`tflint`, `ansible-lint`), and state management.
+
 Each fix must be a single file to create or config block to add — not a multi-step procedure. Remediation is strictly advisory — do NOT modify the target codebase.
 
-Include the roadmap in both the HTML report (as a section after the strengths/opportunities columns) and the JSON output (as a `remediation` array).
+Include the roadmap in both the HTML report (as a section after ALL CRITERIA) and the JSON output (as a `remediation` array).
 
 ### Summary Headline
 
@@ -591,6 +611,36 @@ The HTML report MUST use this structure with inline CSS. Replace all `{placehold
     .criterion-evidence { grid-column: 1 / -1; padding-left: 32px; }
     .level-labels { font-size: 0.65rem; }
   }
+
+  /* Tab Navigation */
+  .tab-nav {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid #1a1a2e;
+    margin-bottom: 32px;
+    margin-top: 24px;
+  }
+  .tab-btn {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: #666;
+    font-family: monospace;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 12px 24px;
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s;
+  }
+  .tab-btn:hover { color: #ccc; }
+  .tab-btn.active {
+    color: #ffffff;
+    border-bottom-color: #4caf50;
+  }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
 </style>
 </head>
 <body>
@@ -617,6 +667,15 @@ The HTML report MUST use this structure with inline CSS. Replace all `{placehold
     <div class="level-label" style="width:{l4_weight}%"><span class="pct">{l4_pct}%</span>&nbsp;<span class="name">L4</span></div>
     <div class="level-label" style="width:{l5_weight}%"><span class="pct">{l5_pct}%</span>&nbsp;<span class="name">L5</span></div>
   </div>
+
+  <!-- TAB NAVIGATION -->
+  <nav class="tab-nav">
+    <button class="tab-btn active" data-tab="assessment">Assessment</button>
+    <button class="tab-btn" data-tab="remediation">Remediation</button>
+  </nav>
+
+  <!-- ASSESSMENT TAB -->
+  <div class="tab-panel active" id="tab-assessment">
 
   <!-- SUMMARY -->
   <section class="summary-section">
@@ -647,26 +706,6 @@ The HTML report MUST use this structure with inline CSS. Replace all `{placehold
     </div>
   </section>
 
-  <!-- REMEDIATION ROADMAP -->
-  <section class="criteria-section">
-    <h2 class="criteria-header">REMEDIATION ROADMAP</h2>
-
-    <!-- For each maturity level (L1→L5) with missing criteria: -->
-    <section class="pillar-group">
-      <div class="pillar-header">
-        <span class="pillar-name">Level {N} — {level_label}</span>
-        <span class="pillar-score">{missing_count} gaps</span>
-      </div>
-      <!-- For each missing criterion at this level, ordered by impact (high→medium→low): -->
-      <div class="criterion-row">
-        <span class="status-icon fail" aria-label="Missing">▸</span>
-        <span class="criterion-name">{criterion_name}</span>
-        <span class="criterion-score">{impact}</span>
-        <span class="criterion-evidence">{fix_instruction}</span>
-      </div>
-    </section>
-  </section>
-
   <!-- ALL CRITERIA -->
   <section class="criteria-section">
     <h2 class="criteria-header">ALL CRITERIA</h2>
@@ -687,12 +726,48 @@ The HTML report MUST use this structure with inline CSS. Replace all `{placehold
       </div>
     </section>
   </section>
+
+  </div><!-- /tab-assessment -->
+
+  <!-- REMEDIATION TAB -->
+  <div class="tab-panel" id="tab-remediation">
+
+  <section class="criteria-section" style="margin-top:0;border-top:none;padding-top:0;">
+    <h2 class="criteria-header">REMEDIATION ROADMAP</h2>
+
+    <!-- For each maturity level (L1→L5) with missing criteria: -->
+    <section class="pillar-group">
+      <div class="pillar-header">
+        <span class="pillar-name">Level {N} — {level_label}</span>
+        <span class="pillar-score">{missing_count} gaps</span>
+      </div>
+      <!-- For each missing criterion at this level, ordered by impact (high→medium→low): -->
+      <div class="criterion-row">
+        <span class="status-icon fail" aria-label="Missing">▸</span>
+        <span class="criterion-name">{criterion_name}</span>
+        <span class="criterion-score">{impact}</span>
+        <span class="criterion-evidence">{fix_instruction}</span>
+      </div>
+    </section>
+  </section>
+
+  </div><!-- /tab-remediation -->
 </main>
 
 <footer style="margin-top:48px;padding-top:24px;border-top:1px solid #1a1a2e;font-size:0.75rem;color:#666;font-family:monospace;">
   Agent Fit v1.0.0 · {assessment_date} · {git_sha} · {total_evaluated} criteria evaluated · {total_skipped} skipped
 </footer>
 
+<script>
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  });
+});
+</script>
 </body>
 </html>
 ```
