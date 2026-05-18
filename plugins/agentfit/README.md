@@ -1,6 +1,6 @@
 # Agent-Fit: Agent-Readiness Assessment Skill
 
-A Claude Code skill that evaluates your codebase's agent-readiness across 9 technical pillars, 75+ binary criteria, and 5 maturity levels. Produces an HTML report with pass rate scoring.
+A Claude Code skill that evaluates your codebase's agent-readiness across 9 technical pillars, 86+ binary criteria, and 5 maturity levels. Produces an HTML report with pass rate scoring and a prioritized remediation roadmap.
 
 ## Install
 
@@ -39,10 +39,10 @@ An HTML report scoring your project 0-100% across 9 pillars:
 | Style & Validation | 13 | Formatting, linting, type checking, complexity |
 | Build System | 19 | CI/CD, dependencies, releases, automation |
 | Testing | 8 | Coverage, isolation, flaky detection, performance |
-| Documentation | 8 | README, AGENTS.md, API docs, architecture |
+| Documentation | 10 | README, AGENTS.md, API docs, architecture, changelog |
 | Dev Environment | 5 | Devcontainer, env templates, local services |
 | Debugging & Observability | 11 | Logging, tracing, metrics, alerting, profiling |
-| Security & Governance | 11 | Branch protection, secrets, scanning, CODEOWNERS |
+| Security & Governance | 13 | Branch protection, secrets, scanning, CODEOWNERS, SBOM |
 | Task Discovery | 4 | Issue templates, labeling, backlog health |
 | Product & Analytics | 3 | Analytics, error pipelines, A/B testing |
 
