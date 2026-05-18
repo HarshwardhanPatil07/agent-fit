@@ -324,6 +324,26 @@ Each criterion is assigned to a maturity level (L1-L5). Calculate completion per
 
 **Opportunities (top 3):** Select the 3 most impactful MISSING criteria, prioritized by maturity level (L1 gaps first, then L2, then L3, etc.). Within a level, prioritize criteria from the pillar with the lowest pass rate. Within the same pillar, prioritize alphabetically by criterion name. For each, provide the criterion name, a specific remediation action, and a concrete fix instruction (e.g., "Create `.pre-commit-config.yaml` with a formatter hook", "Add `dependabot.yml` with weekly update schedule", "Create `AGENTS.md` documenting build commands and test workflow"). The fix instruction should be immediately actionable — a single file to create or config to add.
 
+### Remediation Roadmap
+
+Generate a complete remediation roadmap from ALL missing criteria (not just the top 3 opportunities), grouped by maturity level (L1 → L5). Skip levels with no missing criteria. For each missing criterion, provide:
+- **criterion**: snake_case name
+- **pillar**: parent pillar name
+- **impact**: high / medium / low (from the weighted scoring tiers)
+- **fix**: A single, concrete, immediately actionable instruction tailored to the project's detected primary language
+
+Language-aware fix instructions — use the detected language to suggest the correct tool and config format:
+- **Go**: `.golangci.yml` configs, `go test ./...`, `go.sum`, Makefile targets
+- **Python**: `pyproject.toml` with `[tool.ruff]`/`[tool.mypy]`/`[tool.pytest]`, `requirements.txt`
+- **TypeScript/JavaScript**: `eslint.config.mjs`, `tsconfig.json` with `strict: true`, `jest.config.ts`, `package-lock.json`
+- **Rust**: `clippy.toml`, `cargo test`, `Cargo.lock`, `rustfmt.toml`
+- **Java/Kotlin**: `checkstyle.xml`, `build.gradle` configs, JUnit, `pom.xml` settings
+- **C++**: `.clang-format`, `.clang-tidy`, `CMakeLists.txt` test targets, `CMakePresets.json`
+
+Each fix must be a single file to create or config block to add — not a multi-step procedure. Remediation is strictly advisory — do NOT modify the target codebase.
+
+Include the roadmap in both the HTML report (as a section after the strengths/opportunities columns) and the JSON output (as a `remediation` array).
+
 ### Summary Headline
 
 Generate a short headline based on the strongest pillar or most notable pattern. Examples:
@@ -354,7 +374,10 @@ Also write the assessment data as JSON to `/tmp/agentfit-report-{project_name}.j
   "maturity_level": {maturity_level},
   "criteria": {
     "{criterion_name}": { "status": "found|missing|skipped", "evidence": "..." }
-  }
+  },
+  "remediation": [
+    { "criterion": "{name}", "level": {N}, "pillar": "{pillar_name}", "impact": "{high|medium|low}", "fix": "{language_aware_instruction}" }
+  ]
 }
 ```
 This JSON file serves as the grounding reference for future evaluations.
@@ -624,6 +647,26 @@ The HTML report MUST use this structure with inline CSS. Replace all `{placehold
     </div>
   </section>
 
+  <!-- REMEDIATION ROADMAP -->
+  <section class="criteria-section">
+    <h2 class="criteria-header">REMEDIATION ROADMAP</h2>
+
+    <!-- For each maturity level (L1→L5) with missing criteria: -->
+    <section class="pillar-group">
+      <div class="pillar-header">
+        <span class="pillar-name">Level {N} — {level_label}</span>
+        <span class="pillar-score">{missing_count} gaps</span>
+      </div>
+      <!-- For each missing criterion at this level, ordered by impact (high→medium→low): -->
+      <div class="criterion-row">
+        <span class="status-icon fail" aria-label="Missing">▸</span>
+        <span class="criterion-name">{criterion_name}</span>
+        <span class="criterion-score">{impact}</span>
+        <span class="criterion-evidence">{fix_instruction}</span>
+      </div>
+    </section>
+  </section>
+
   <!-- ALL CRITERIA -->
   <section class="criteria-section">
     <h2 class="criteria-header">ALL CRITERIA</h2>
@@ -664,6 +707,7 @@ After opening the HTML report, print a brief summary to the console:
 Agent Fit Report: {project_name}
 Pass Rate: {pass_rate}% | Weighted: {weighted_score}% | Level: L{maturity_level} ({maturity_label})
 Report: /tmp/agentfit-report-{project_name}.html
+Remediation: {remediation_count} actionable fixes in roadmap (see report)
 
 Pillars:
   Style & Validation:       {p1_passed}/{p1_total} ({p1_pct}%)
