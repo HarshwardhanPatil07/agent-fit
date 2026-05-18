@@ -319,6 +319,11 @@ Each criterion is assigned to a maturity level (L1-L5). Calculate completion per
 
 **Level bar weights:** For the progress bar, calculate each level's visual width proportional to its applicable criteria count: `{lN_weight} = round(applicable_criteria_at_level_N / total_applicable_criteria * 100)`. Ensure the 5 weights sum to 100 (adjust the largest to absorb rounding).
 
+**Level gate cards (HTML + console):** For each level N, set:
+- `{lN_gate_class}`: `pass` if level N meets the 80% gate and all prior levels pass; `fail` if evaluated but below gate; `blocked` if a prior level gate is not met
+- `{lN_gate_status}`: `✓ Passed` | `✗ Below gate` | `Blocked by L{m}` (use the lowest unmet prerequisite level for m)
+- `{lN_gate_symbol}` (console only): `✓` | `✗` | `— (blocked by L{m})`
+
 ### Strengths and Opportunities
 
 **Strengths (top 3):** Select the 3 pillars with the highest percentage scores. For each, list the pillar name with percentage and 2-3 key passing criteria as evidence.
@@ -405,9 +410,18 @@ Also write the assessment data as JSON to `/tmp/agentfit-report-{project_name}.j
 ```
 This JSON file serves as the grounding reference for future evaluations and MUST be written on every successful run alongside the HTML report.
 
+### Report Metadata (footer + JSON)
+
+Before generating HTML, capture:
+- **assessment_date**: ISO 8601 UTC timestamp when the run completes
+- **plugin_version**: Read `version` from `plugins/agentfit/.claude-plugin/plugin.json` (currently `1.0.0`)
+- **git_sha**: `git -C {repo} rev-parse --short HEAD 2>/dev/null` or `unknown` if not a git repo
+- **assessment_duration**: Elapsed seconds since Step 1 started, formatted as `{N}s` or `{m}m {s}s`
+- **total_applicable** / **criteria_skipped**: Counts from the evaluation pass
+
 ### HTML Template
 
-The HTML report MUST use this structure with inline CSS. Replace all `{placeholder}` values with actual assessment data:
+The HTML report MUST use this structure with inline CSS and inline JavaScript (zero external dependencies). Replace all `{placeholder}` values with actual assessment data. Each criterion row MUST include `data-status`, `data-level`, and `data-name` attributes for filtering.
 
 ```html
 <!DOCTYPE html>
@@ -417,362 +431,570 @@ The HTML report MUST use this structure with inline CSS. Replace all `{placehold
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{project_name} — Agent Fit Report</title>
 <style>
+  :root {
+    --bg: #07070f;
+    --surface: rgba(18, 22, 40, 0.72);
+    --border: rgba(120, 130, 180, 0.18);
+    --text: #e8eaf6;
+    --muted: #8b93b3;
+    --accent: #6ee7a8;
+    --warn: #f0b429;
+    --fail: #ff6b4a;
+    --skip: #5a6078;
+    --glow: rgba(110, 231, 168, 0.35);
+  }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    background: #0d0d1a;
-    color: #e0e0e0;
-    padding: 40px 60px;
-    line-height: 1.6;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.55;
+    min-height: 100vh;
+    padding: 32px clamp(16px, 4vw, 64px) 48px;
+  }
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 80% 50% at 10% -10%, rgba(110, 231, 168, 0.12), transparent),
+      radial-gradient(ellipse 60% 40% at 90% 0%, rgba(99, 102, 241, 0.14), transparent),
+      radial-gradient(ellipse 50% 30% at 50% 100%, rgba(240, 180, 41, 0.08), transparent);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .page { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; }
+
+  .hero {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 28px;
+    align-items: center;
+    padding: 28px 32px;
+    margin-bottom: 28px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
   }
   h1 {
-    font-size: 3rem;
+    font-size: clamp(1.8rem, 4vw, 2.75rem);
     font-weight: 300;
-    margin-bottom: 4px;
-    color: #ffffff;
+    letter-spacing: -0.02em;
+    color: #fff;
   }
   .badge {
     display: inline-block;
-    font-size: 0.8rem;
-    font-weight: 600;
-    padding: 2px 10px;
-    border: 1px solid #888;
-    border-radius: 12px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 4px 12px;
+    margin-left: 10px;
+    border-radius: 999px;
     vertical-align: middle;
-    margin-left: 12px;
-    color: #ccc;
     text-transform: uppercase;
+    letter-spacing: 0.06em;
+    background: linear-gradient(135deg, rgba(110,231,168,0.2), rgba(99,102,241,0.25));
+    border: 1px solid rgba(110, 231, 168, 0.35);
+    color: var(--accent);
   }
   .meta {
-    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-    font-size: 0.85rem;
-    color: #888;
-    margin-bottom: 4px;
+    font-family: ui-monospace, 'SF Mono', Consolas, monospace;
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-top: 8px;
   }
-  .description {
-    font-size: 0.9rem;
-    color: #999;
-    margin-bottom: 24px;
-  }
+  .description { font-size: 0.9rem; color: var(--muted); margin-top: 10px; max-width: 52ch; }
 
-  /* Level Progress Bar */
+  .maturity-dial {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: conic-gradient(var(--accent) calc({pass_rate} * 1%), rgba(255,255,255,0.06) 0);
+    border: 2px solid var(--border);
+    box-shadow: 0 0 40px var(--glow);
+  }
+  .maturity-dial .level-num { font-size: 2rem; font-weight: 700; color: #fff; line-height: 1; }
+  .maturity-dial .level-sub { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); }
+
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+  .stat-card {
+    padding: 14px 16px;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .stat-card .label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
+  .stat-card .value { font-size: 1.35rem; font-weight: 600; font-family: ui-monospace, monospace; margin-top: 4px; }
+  .stat-card.accent .value { color: var(--accent); }
+  .stat-card.warn .value { color: var(--warn); }
+
+  .level-section { margin-bottom: 36px; }
   .level-bar {
     display: flex;
-    height: 8px;
-    border-radius: 4px;
+    height: 10px;
+    border-radius: 999px;
     overflow: hidden;
-    margin-bottom: 8px;
-    background: #1a1a2e;
+    margin-bottom: 10px;
+    background: rgba(255,255,255,0.06);
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.4);
   }
-  .level-segment {
-    height: 100%;
-    position: relative;
-  }
+  .level-segment { height: 100%; }
   .level-labels {
     display: flex;
-    margin-bottom: 40px;
-    font-size: 0.75rem;
-    font-family: monospace;
-  }
-  .level-label {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-  }
-  .level-label .pct { color: #ccc; }
-  .level-label .name { color: #888; }
-
-  .l1 { background: #1a6b3a; }
-  .l2 { background: #2d8a4e; }
-  .l3 { background: #40a862; }
-  .l4 { background: #d4a017; }
-  .l5 { background: #333; }
-
-  /* Summary */
-  .summary-section { margin-bottom: 48px; }
-  .summary-section h2 {
-    font-size: 1.8rem;
-    font-weight: 600;
-    color: #ffffff;
     margin-bottom: 16px;
-    margin-top: 40px;
+    font-size: 0.72rem;
+    font-family: ui-monospace, monospace;
   }
-  .summary-section p {
-    font-family: monospace;
-    font-size: 0.85rem;
-    color: #999;
-    max-width: 700px;
-    line-height: 1.7;
-    margin-bottom: 32px;
-  }
+  .level-label { display: flex; align-items: center; gap: 4px; min-width: 0; }
+  .level-label .pct { color: #cdd3ef; font-weight: 600; }
+  .level-label .name { color: var(--muted); }
+  .l1 { background: linear-gradient(90deg, #14532d, #22c55e); }
+  .l2 { background: linear-gradient(90deg, #166534, #4ade80); }
+  .l3 { background: linear-gradient(90deg, #3f6212, #a3e635); }
+  .l4 { background: linear-gradient(90deg, #854d0e, #fbbf24); }
+  .l5 { background: linear-gradient(90deg, #374151, #6b7280); }
 
-  /* Strengths / Opportunities */
-  .columns {
+  .level-gates {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 60px;
-  }
-  .col-header {
-    font-size: 0.7rem;
-    font-weight: 400;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    color: #999;
-    margin-bottom: 20px;
-  }
-  .highlight {
-    margin-bottom: 20px;
-  }
-  .highlight-num {
-    font-size: 0.85rem;
-    font-weight: 700;
-    margin-bottom: 4px;
-  }
-  .highlight-num.green { color: #4caf50; }
-  .highlight-num.orange { color: #d4a017; }
-  .highlight-title {
-    font-size: 1rem;
-    font-weight: 600;
-    color: #ffffff;
-    margin-bottom: 4px;
-  }
-  .highlight-detail {
-    font-size: 0.8rem;
-    color: #888;
-    line-height: 1.5;
-  }
-
-  /* Criteria Section */
-  .criteria-section {
-    margin-top: 48px;
-    border-top: 1px solid #1a1a2e;
-    padding-top: 32px;
-  }
-  .criteria-header {
-    font-size: 0.7rem;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    color: #999;
-    margin-bottom: 24px;
-  }
-  .pillar-group { margin-bottom: 32px; }
-  .pillar-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 0;
-    border-bottom: 1px solid #1a1a2e;
-    margin-bottom: 8px;
-  }
-  .pillar-name {
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: #ffffff;
-  }
-  .pillar-score {
-    font-size: 0.85rem;
-    color: #999;
-    font-family: monospace;
-  }
-  .criterion-row {
-    display: grid;
-    grid-template-columns: 24px 200px 50px 1fr;
-    gap: 16px;
-    padding: 6px 0;
-    align-items: baseline;
-    font-size: 0.8rem;
-  }
-  .status-icon { text-align: center; }
-  .status-icon.pass { color: #4caf50; }
-  .status-icon.fail { color: #e85d3a; }
-  .status-icon.skip { color: #555; }
-  .criterion-name {
-    font-family: monospace;
-    color: #ccc;
-  }
-  .criterion-score {
-    font-family: monospace;
-    color: #888;
-    text-align: center;
-  }
-  .criterion-evidence {
-    color: #999;
-    line-height: 1.4;
-    word-wrap: break-word;
-    overflow-wrap: break-word;
-  }
-  .criterion-row.changed {
-    background: rgba(212, 160, 23, 0.12);
-    border-left: 2px solid #d4a017;
-    padding-left: 8px;
-  }
-  .controls {
-    display: flex;
-    flex-wrap: wrap;
+    grid-template-columns: repeat(5, 1fr);
     gap: 8px;
-    margin-bottom: 18px;
-    align-items: center;
   }
-  .controls input,
-  .controls select,
-  .controls button {
-    background: #111626;
-    color: #ddd;
-    border: 1px solid #2b2f42;
-    border-radius: 6px;
-    padding: 6px 10px;
-    font-size: 0.78rem;
+  .gate-card {
+    padding: 10px 8px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: rgba(12, 14, 28, 0.6);
+    text-align: center;
+    font-size: 0.68rem;
   }
-  .controls button.active {
-    border-color: #4caf50;
-    color: #4caf50;
-  }
-  .pillar-header.toggle {
-    cursor: pointer;
-  }
-  .pillar-group.collapsed .criterion-row {
-    display: none;
+  .gate-card .gate-pct { font-family: ui-monospace, monospace; font-size: 1rem; font-weight: 700; display: block; }
+  .gate-card .gate-name { color: var(--muted); margin-top: 2px; display: block; }
+  .gate-card .gate-status { margin-top: 6px; font-weight: 600; }
+  .gate-card.pass { border-color: rgba(110, 231, 168, 0.45); }
+  .gate-card.pass .gate-status { color: var(--accent); }
+  .gate-card.fail { border-color: rgba(255, 107, 74, 0.4); }
+  .gate-card.fail .gate-status { color: var(--fail); }
+  .gate-card.blocked { opacity: 0.65; }
+  .gate-card.blocked .gate-status { color: var(--muted); }
+
+  .summary-section { margin-bottom: 40px; }
+  .summary-section h2 { font-size: 1.65rem; font-weight: 600; color: #fff; margin-bottom: 12px; }
+  .summary-section > p {
+    font-family: ui-monospace, monospace;
+    font-size: 0.82rem;
+    color: var(--muted);
+    max-width: 720px;
+    margin-bottom: 28px;
   }
   .delta-chip {
-    font-family: monospace;
-    font-size: 0.78rem;
-    color: #d4a017;
-    margin-left: 8px;
+    font-family: ui-monospace, monospace;
+    font-size: 0.75rem;
+    color: var(--warn);
+    margin-left: 10px;
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: rgba(240, 180, 41, 0.12);
   }
-  footer {
-    margin-top: 28px;
-    border-top: 1px solid #1a1a2e;
-    padding-top: 16px;
-    color: #888;
-    font-size: 0.78rem;
-    font-family: monospace;
+  .columns { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+  .col-header {
+    font-size: 0.68rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 16px;
+  }
+  .highlight {
+    padding: 14px 16px;
+    margin-bottom: 12px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: rgba(12, 14, 28, 0.5);
+  }
+  .highlight-num { font-size: 0.75rem; font-weight: 800; margin-bottom: 6px; }
+  .highlight-num.green { color: var(--accent); }
+  .highlight-num.orange { color: var(--warn); }
+  .highlight-title { font-size: 0.95rem; font-weight: 600; color: #fff; margin-bottom: 4px; }
+  .highlight-detail { font-size: 0.78rem; color: var(--muted); line-height: 1.5; }
+
+  .criteria-section {
+    margin-top: 40px;
+    padding-top: 28px;
+    border-top: 1px solid var(--border);
+  }
+  .criteria-top {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .criteria-header {
+    font-size: 0.68rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  #filter-count { font-family: ui-monospace, monospace; font-size: 0.72rem; color: var(--muted); }
+
+  .toolbar {
+    position: sticky;
+    top: 12px;
+    z-index: 10;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    padding: 14px 16px;
+    margin-bottom: 20px;
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    background: rgba(10, 12, 24, 0.92);
+    backdrop-filter: blur(14px);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  }
+  .toolbar.is-scrolled { border-color: rgba(110, 231, 168, 0.25); }
+  .filter-group { display: flex; flex-wrap: wrap; gap: 6px; }
+  .filter-btn, .toolbar select, .toolbar input, .ghost-btn {
+    background: rgba(255,255,255,0.04);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 7px 14px;
+    font-size: 0.76rem;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+  }
+  .filter-btn:hover, .ghost-btn:hover { border-color: rgba(110, 231, 168, 0.4); }
+  .filter-btn.active {
+    background: rgba(110, 231, 168, 0.15);
+    border-color: var(--accent);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .search-wrap { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 180px; max-width: 280px; }
+  .search-wrap input { flex: 1; border-radius: 999px; padding-left: 14px; }
+  .search-wrap input::placeholder { color: var(--muted); }
+  .toolbar select { border-radius: 10px; padding-right: 28px; cursor: pointer; }
+  .toolbar-actions { display: flex; gap: 6px; margin-left: auto; }
+  .ghost-btn { font-size: 0.72rem; }
+
+  .pillar-group {
+    margin-bottom: 20px;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+    background: rgba(12, 14, 28, 0.45);
+  }
+  .pillar-header.toggle {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    cursor: pointer;
+    user-select: none;
+    background: rgba(255,255,255,0.02);
+    transition: background 0.15s;
+  }
+  .pillar-header.toggle:hover { background: rgba(110, 231, 168, 0.06); }
+  .chevron {
+    font-size: 0.7rem;
+    color: var(--muted);
+    transition: transform 0.2s;
+    width: 1em;
+  }
+  .pillar-group.collapsed .chevron { transform: rotate(-90deg); }
+  .pillar-name { font-size: 0.92rem; font-weight: 600; color: #fff; flex: 1; }
+  .pillar-mini-bar {
+    flex: 0 0 80px;
+    height: 4px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.08);
+    overflow: hidden;
+  }
+  .pillar-mini-bar span {
+    display: block;
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), #6366f1);
+    border-radius: inherit;
+  }
+  .pillar-score { font-family: ui-monospace, monospace; font-size: 0.78rem; color: var(--muted); }
+  .pillar-body { padding: 0 12px 10px; }
+  .pillar-group.collapsed .pillar-body { display: none; }
+
+  .criterion-row {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-    gap: 8px;
+    grid-template-columns: 28px 52px 1fr 56px minmax(0, 2fr);
+    gap: 10px 14px;
+    padding: 10px 8px;
+    align-items: start;
+    font-size: 0.78rem;
+    border-radius: 8px;
+    margin-bottom: 2px;
+    transition: background 0.12s;
+  }
+  .criterion-row:hover { background: rgba(255,255,255,0.03); }
+  .status-icon { text-align: center; font-size: 0.95rem; line-height: 1.4; }
+  .status-icon.pass { color: var(--accent); }
+  .status-icon.fail { color: var(--fail); }
+  .status-icon.skip { color: var(--skip); }
+  .level-tag {
+    font-family: ui-monospace, monospace;
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(99, 102, 241, 0.2);
+    color: #a5b4fc;
+    text-align: center;
+  }
+  .criterion-name { font-family: ui-monospace, monospace; color: #d4daf0; word-break: break-word; }
+  .criterion-score { font-family: ui-monospace, monospace; color: var(--muted); text-align: right; }
+  .criterion-evidence { color: var(--muted); line-height: 1.45; word-break: break-word; }
+  .criterion-row.changed {
+    background: rgba(240, 180, 41, 0.1);
+    border-left: 3px solid var(--warn);
+    padding-left: 10px;
+  }
+  .empty-state {
+    display: none;
+    text-align: center;
+    padding: 32px;
+    color: var(--muted);
+    font-family: ui-monospace, monospace;
+    font-size: 0.82rem;
+  }
+  .empty-state.visible { display: block; }
+
+  footer.report-footer {
+    margin-top: 40px;
+    padding: 24px 28px;
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px 24px;
+  }
+  footer.report-footer .footer-item { display: flex; flex-direction: column; gap: 4px; }
+  footer.report-footer .footer-label {
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+  }
+  footer.report-footer .footer-value {
+    font-family: ui-monospace, monospace;
+    font-size: 0.8rem;
+    color: #cdd3ef;
+    word-break: break-all;
+  }
+  .brand-line {
+    grid-column: 1 / -1;
+    padding-top: 12px;
+    margin-top: 4px;
+    border-top: 1px solid var(--border);
+    font-size: 0.72rem;
+    color: var(--muted);
+    text-align: center;
   }
 
   @media (max-width: 768px) {
-    body { padding: 20px 16px; }
-    h1 { font-size: 2rem; }
-    .columns { grid-template-columns: 1fr; gap: 32px; }
-    .criterion-row {
-      grid-template-columns: 24px 1fr;
-      gap: 8px;
-    }
-    .criterion-score { text-align: left; }
-    .criterion-evidence { grid-column: 1 / -1; padding-left: 32px; }
-    .level-labels { font-size: 0.65rem; }
-    .controls { flex-direction: column; align-items: stretch; }
+    .hero { grid-template-columns: 1fr; text-align: center; }
+    .maturity-dial { margin: 0 auto; }
+    .columns { grid-template-columns: 1fr; }
+    .level-gates { grid-template-columns: repeat(2, 1fr); }
+    .criterion-row { grid-template-columns: 24px 44px 1fr; }
+    .criterion-score, .criterion-evidence { grid-column: 2 / -1; }
+    .toolbar { flex-direction: column; align-items: stretch; }
+    .toolbar-actions { margin-left: 0; justify-content: center; }
+  }
+  @media print {
+    body::before { display: none; }
+    .toolbar { position: static; }
+    .pillar-group.collapsed .pillar-body { display: block !important; }
   }
 </style>
 </head>
 <body>
+<div class="page">
 
-<header>
-  <h1>{project_name} <span class="badge">{language}</span></h1>
-  <p class="meta">{repo_path}&nbsp;&nbsp;&nbsp;PASS RATE {pass_rate}%&nbsp;&nbsp;·&nbsp;&nbsp;WEIGHTED {weighted_score}%</p>
-  <p class="description">{project_description}</p>
+<header class="hero">
+  <div>
+    <h1>{project_name} <span class="badge">{language}</span></h1>
+    <p class="meta">{repo_path}</p>
+    <p class="description">{project_description}</p>
+  </div>
+  <div class="maturity-dial" aria-label="Maturity level {maturity_level}, {maturity_label}">
+    <span class="level-num">L{maturity_level}</span>
+    <span class="level-sub">{maturity_label}</span>
+  </div>
 </header>
 
-<main>
-  <!-- LEVEL PROGRESS BAR -->
-  <div class="level-bar" role="progressbar" aria-valuenow="{maturity_level}" aria-valuemin="1" aria-valuemax="5" aria-label="Maturity level {maturity_level} of 5">
-    <div class="level-segment l1" style="width:{l1_weight}%"></div>
-    <div class="level-segment l2" style="width:{l2_weight}%"></div>
-    <div class="level-segment l3" style="width:{l3_weight}%"></div>
-    <div class="level-segment l4" style="width:{l4_weight}%"></div>
-    <div class="level-segment l5" style="width:{l5_weight}%"></div>
-  </div>
-  <div class="level-labels" aria-hidden="true">
-    <div class="level-label" style="width:{l1_weight}%"><span class="pct">{l1_pct}%</span>&nbsp;<span class="name">L1</span></div>
-    <div class="level-label" style="width:{l2_weight}%"><span class="pct">{l2_pct}%</span>&nbsp;<span class="name">L2</span></div>
-    <div class="level-label" style="width:{l3_weight}%"><span class="pct">{l3_pct}%</span>&nbsp;<span class="name">L3</span></div>
-    <div class="level-label" style="width:{l4_weight}%"><span class="pct">{l4_pct}%</span>&nbsp;<span class="name">L4</span></div>
-    <div class="level-label" style="width:{l5_weight}%"><span class="pct">{l5_pct}%</span>&nbsp;<span class="name">L5</span></div>
-  </div>
+<div class="stat-grid">
+  <div class="stat-card accent"><div class="label">Pass Rate</div><div class="value">{pass_rate}%</div></div>
+  <div class="stat-card"><div class="label">Weighted</div><div class="value">{weighted_score}%</div></div>
+  <div class="stat-card warn"><div class="label">Evaluated</div><div class="value">{total_applicable}</div></div>
+  <div class="stat-card"><div class="label">Skipped</div><div class="value">{criteria_skipped}</div></div>
+</div>
 
-  <!-- SUMMARY -->
+<main>
+  <section class="level-section">
+    <div class="level-bar" role="progressbar" aria-valuenow="{maturity_level}" aria-valuemin="1" aria-valuemax="5" aria-label="Maturity level {maturity_level} of 5">
+      <div class="level-segment l1" style="width:{l1_weight}%"></div>
+      <div class="level-segment l2" style="width:{l2_weight}%"></div>
+      <div class="level-segment l3" style="width:{l3_weight}%"></div>
+      <div class="level-segment l4" style="width:{l4_weight}%"></div>
+      <div class="level-segment l5" style="width:{l5_weight}%"></div>
+    </div>
+    <div class="level-labels" aria-hidden="true">
+      <div class="level-label" style="width:{l1_weight}%"><span class="pct">{l1_pct}%</span> <span class="name">L1</span></div>
+      <div class="level-label" style="width:{l2_weight}%"><span class="pct">{l2_pct}%</span> <span class="name">L2</span></div>
+      <div class="level-label" style="width:{l3_weight}%"><span class="pct">{l3_pct}%</span> <span class="name">L3</span></div>
+      <div class="level-label" style="width:{l4_weight}%"><span class="pct">{l4_pct}%</span> <span class="name">L4</span></div>
+      <div class="level-label" style="width:{l5_weight}%"><span class="pct">{l5_pct}%</span> <span class="name">L5</span></div>
+    </div>
+    <div class="level-gates">
+      <div class="gate-card {l1_gate_class}"><span class="gate-pct">{l1_pct}%</span><span class="gate-name">L1 Functional</span><span class="gate-status">{l1_gate_status}</span></div>
+      <div class="gate-card {l2_gate_class}"><span class="gate-pct">{l2_pct}%</span><span class="gate-name">L2 Documented</span><span class="gate-status">{l2_gate_status}</span></div>
+      <div class="gate-card {l3_gate_class}"><span class="gate-pct">{l3_pct}%</span><span class="gate-name">L3 Standardized</span><span class="gate-status">{l3_gate_status}</span></div>
+      <div class="gate-card {l4_gate_class}"><span class="gate-pct">{l4_pct}%</span><span class="gate-name">L4 Optimized</span><span class="gate-status">{l4_gate_status}</span></div>
+      <div class="gate-card {l5_gate_class}"><span class="gate-pct">{l5_pct}%</span><span class="gate-name">L5 Autonomous</span><span class="gate-status">{l5_gate_status}</span></div>
+    </div>
+  </section>
+
   <section class="summary-section">
     <h2>{summary_headline}<span class="delta-chip">{pass_rate_delta_text}</span></h2>
     <p>{summary_text}</p>
-
     <div class="columns">
       <div>
-        <h3 class="col-header">STRENGTHS</h3>
-        <!-- Repeat for each strength (top 3) -->
+        <h3 class="col-header">Strengths</h3>
         <article class="highlight">
           <div class="highlight-num green">01</div>
           <div class="highlight-title">{strength_1_title}</div>
           <div class="highlight-detail">{strength_1_detail}</div>
         </article>
-        <!-- 02, 03 ... -->
+        <!-- Repeat 02, 03 for additional strengths -->
       </div>
       <div>
-        <h3 class="col-header">OPPORTUNITIES</h3>
-        <!-- Repeat for each opportunity (top 3) -->
+        <h3 class="col-header">Opportunities</h3>
         <article class="highlight">
           <div class="highlight-num orange">01</div>
           <div class="highlight-title">{opportunity_1_title}</div>
           <div class="highlight-detail">{opportunity_1_detail}</div>
         </article>
-        <!-- 02, 03 ... -->
+        <!-- Repeat 02, 03 for additional opportunities -->
       </div>
     </div>
   </section>
 
-  <!-- ALL CRITERIA -->
   <section class="criteria-section">
-    <h2 class="criteria-header">ALL CRITERIA</h2>
-    <div class="controls">
-      <button type="button" class="filter-btn active" data-status="all">Show All</button>
-      <button type="button" class="filter-btn" data-status="found">Found</button>
-      <button type="button" class="filter-btn" data-status="missing">Missing</button>
-      <button type="button" class="filter-btn" data-status="skipped">Skipped</button>
-      <input id="criteria-search" type="search" placeholder="Search criteria by name">
-      <select id="level-filter">
-        <option value="all">All Levels</option>
-        <option value="1">Level 1</option>
-        <option value="2">Level 2</option>
-        <option value="3">Level 3</option>
-        <option value="4">Level 4</option>
-        <option value="5">Level 5</option>
-      </select>
+    <div class="criteria-top">
+      <h2 class="criteria-header">All Criteria</h2>
+      <span id="filter-count">Showing all criteria</span>
     </div>
+
+    <div class="toolbar" id="criteria-toolbar">
+      <div class="filter-group">
+        <button type="button" class="filter-btn active" data-status="all">Show All</button>
+        <button type="button" class="filter-btn" data-status="found">Found</button>
+        <button type="button" class="filter-btn" data-status="missing">Missing</button>
+        <button type="button" class="filter-btn" data-status="skipped">Skipped</button>
+      </div>
+      <div class="search-wrap">
+        <input id="criteria-search" type="search" placeholder="Search criteria by name…" aria-label="Search criteria">
+        <button type="button" class="ghost-btn" id="clear-search" title="Clear search">✕</button>
+      </div>
+      <select id="level-filter" aria-label="Filter by maturity level">
+        <option value="all">All Levels</option>
+        <option value="1">Level 1 — Functional</option>
+        <option value="2">Level 2 — Documented</option>
+        <option value="3">Level 3 — Standardized</option>
+        <option value="4">Level 4 — Optimized</option>
+        <option value="5">Level 5 — Autonomous</option>
+      </select>
+      <div class="toolbar-actions">
+        <button type="button" class="ghost-btn" id="expand-all">Expand all</button>
+        <button type="button" class="ghost-btn" id="collapse-all">Collapse all</button>
+      </div>
+    </div>
+
+    <div id="criteria-empty" class="empty-state">No criteria match the current filters. Try clearing search or changing status/level.</div>
 
     <!-- Repeat for each pillar (9 total) -->
     <section class="pillar-group">
       <div class="pillar-header toggle" role="button" tabindex="0" aria-expanded="true">
+        <span class="chevron" aria-hidden="true">▼</span>
         <span class="pillar-name">{pillar_name}</span>
+        <div class="pillar-mini-bar" aria-hidden="true"><span style="width:{percentage}%"></span></div>
         <span class="pillar-score">{passed}/{total} ({percentage}%)</span>
       </div>
-
-      <!-- Repeat for each criterion in this pillar, alphabetically by name -->
-      <div class="criterion-row {changed_class}" data-status="{found|missing|skipped}" data-level="{level}" data-name="{criterion_name}">
-        <span class="status-icon {pass|fail|skip}" aria-label="{pass: Passed|fail: Failed|skip: Skipped}">{✓|✗|—}</span>
-        <span class="criterion-name">{criterion_name}</span>
-        <span class="criterion-score">{1/1|0/1|—/—}</span>
-        <span class="criterion-evidence">{evidence_text}</span>
+      <div class="pillar-body">
+        <!-- Repeat for each criterion in this pillar, alphabetically by name -->
+        <div class="criterion-row {changed_class}" data-status="{found|missing|skipped}" data-level="{level}" data-name="{criterion_name}">
+          <span class="status-icon {pass|fail|skip}" aria-label="{pass: Passed|fail: Failed|skip: Skipped}">{✓|✗|—}</span>
+          <span class="level-tag">L{level}</span>
+          <span class="criterion-name">{criterion_name}</span>
+          <span class="criterion-score">{1/1|0/1|—/—}</span>
+          <span class="criterion-evidence">{evidence_text}</span>
+        </div>
       </div>
     </section>
   </section>
 </main>
 
-<footer>
-  <div>Assessed: {assessment_date}</div>
-  <div>Skill version: {plugin_version}</div>
-  <div>Criteria evaluated: {total_applicable}</div>
-  <div>Criteria skipped: {criteria_skipped}</div>
-  <div>Git SHA: {git_sha}</div>
-  <div>Duration: {assessment_duration}</div>
+<footer class="report-footer">
+  <div class="footer-item">
+    <span class="footer-label">Assessment date</span>
+    <span class="footer-value">{assessment_date}</span>
+  </div>
+  <div class="footer-item">
+    <span class="footer-label">Skill version</span>
+    <span class="footer-value">{plugin_version}</span>
+  </div>
+  <div class="footer-item">
+    <span class="footer-label">Criteria evaluated</span>
+    <span class="footer-value">{total_applicable}</span>
+  </div>
+  <div class="footer-item">
+    <span class="footer-label">Criteria skipped</span>
+    <span class="footer-value">{criteria_skipped}</span>
+  </div>
+  <div class="footer-item">
+    <span class="footer-label">Git SHA</span>
+    <span class="footer-value">{git_sha}</span>
+  </div>
+  <div class="footer-item">
+    <span class="footer-label">Assessment duration</span>
+    <span class="footer-value">{assessment_duration}</span>
+  </div>
+  <p class="brand-line">Generated by Agent Fit · agent-readiness assessment</p>
 </footer>
+
+</div>
 
 <script>
 (() => {
   const buttons = Array.from(document.querySelectorAll('.filter-btn'));
   const searchInput = document.getElementById('criteria-search');
+  const clearSearch = document.getElementById('clear-search');
   const levelSelect = document.getElementById('level-filter');
+  const filterCount = document.getElementById('filter-count');
+  const emptyState = document.getElementById('criteria-empty');
+  const toolbar = document.getElementById('criteria-toolbar');
   const rows = Array.from(document.querySelectorAll('.criterion-row'));
   const groups = Array.from(document.querySelectorAll('.pillar-group'));
+  const totalRows = rows.length;
   let statusFilter = 'all';
 
   const applyFilters = () => {
@@ -790,19 +1012,10 @@ The HTML report MUST use this structure with inline CSS. Replace all `{placehold
       const anyVisible = Array.from(group.querySelectorAll('.criterion-row')).some((row) => row.style.display !== 'none');
       group.style.display = anyVisible ? '' : 'none';
     });
-    const emptyId = 'criteria-empty-state';
-    let empty = document.getElementById(emptyId);
-    if (!empty) {
-      empty = document.createElement('div');
-      empty.id = emptyId;
-      empty.style.color = '#777';
-      empty.style.fontFamily = 'monospace';
-      empty.style.fontSize = '0.78rem';
-      empty.style.marginTop = '10px';
-      empty.textContent = 'No criteria match the current filters.';
-      document.querySelector('.criteria-section').appendChild(empty);
-    }
-    empty.style.display = visibleCount === 0 ? '' : 'none';
+    emptyState.classList.toggle('visible', visibleCount === 0);
+    filterCount.textContent = visibleCount === totalRows
+      ? `Showing all ${totalRows} criteria`
+      : `Showing ${visibleCount} of ${totalRows} criteria`;
   };
 
   buttons.forEach((btn) => {
@@ -813,7 +1026,18 @@ The HTML report MUST use this structure with inline CSS. Replace all `{placehold
     });
   });
   searchInput.addEventListener('input', applyFilters);
+  clearSearch.addEventListener('click', () => { searchInput.value = ''; searchInput.focus(); applyFilters(); });
   levelSelect.addEventListener('change', applyFilters);
+
+  const setAllCollapsed = (collapsed) => {
+    groups.forEach((group) => {
+      const header = group.querySelector('.pillar-header.toggle');
+      group.classList.toggle('collapsed', collapsed);
+      if (header) header.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    });
+  };
+  document.getElementById('expand-all').addEventListener('click', () => setAllCollapsed(false));
+  document.getElementById('collapse-all').addEventListener('click', () => setAllCollapsed(true));
 
   groups.forEach((group) => {
     const header = group.querySelector('.pillar-header.toggle');
@@ -831,15 +1055,26 @@ The HTML report MUST use this structure with inline CSS. Replace all `{placehold
     });
   });
 
+  window.addEventListener('scroll', () => {
+    toolbar.classList.toggle('is-scrolled', window.scrollY > 80);
+  }, { passive: true });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === '/' && document.activeElement !== searchInput) {
+      event.preventDefault();
+      searchInput.focus();
+    }
+  });
+
   applyFilters();
 })();
 </script>
-
 </body>
 </html>
+
 ```
 
-**IMPORTANT**: When generating the HTML, replace ALL `{placeholder}` values with actual data from the assessment. Do NOT leave any placeholders in the output. Generate the complete HTML string and write it to the temp file in a single Bash command.
+**IMPORTANT**: When generating the HTML, replace ALL `{placeholder}` values with actual data from the assessment (including gate card classes/statuses). Do NOT leave any placeholders in the output. You may use `plugins/agentfit/templates/report-template.html` as the canonical structure reference. Generate the complete HTML string and write it to the temp file in a single Bash command.
 
 ## Step 5: Report to User
 
@@ -863,14 +1098,14 @@ Pillars:
   Product & Analytics:      {p9_passed}/{p9_total} ({p9_pct}%)
 
 Levels:
-  L1 Functional:            {l1_pct}% {l1_gate_symbol} (gate: 80%)
-  L2 Documented:            {l2_pct}% {l2_gate_symbol} (gate: 80%)
-  L3 Standardized:          {l3_pct}% {l3_gate_symbol}
-  L4 Optimized:             {l4_pct}% {l4_gate_symbol}
-  L5 Autonomous:            {l5_pct}% {l5_gate_symbol}
+  L1 Functional:     {l1_pct}% {l1_gate_symbol} (gate: 80%)
+  L2 Documented:     {l2_pct}% {l2_gate_symbol} (gate: 80%)
+  L3 Standardized:   {l3_pct}% {l3_gate_symbol}
+  L4 Optimized:      {l4_pct}% {l4_gate_symbol}
+  L5 Autonomous:     {l5_pct}% {l5_gate_symbol}
 ```
 
-Where symbols are:
+Align level names and percentages in a fixed-width column (pad level labels to ~18 characters) so gate symbols line up in the console. Where symbols are:
 - `✓` when that level gate is passed
 - `✗` when the level was evaluated but below the 80% gate
-- `— (blocked by L{n})` when a previous level gate is not yet passed
+- `— (blocked by L{n})` when a previous level gate is not yet passed (omit `(gate: 80%)` on blocked lines)

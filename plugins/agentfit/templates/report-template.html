@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>sample-project — Agent Fit Report</title>
+<title>{project_name} — Agent Fit Report</title>
 <style>
   :root {
     --bg: #07070f;
@@ -88,7 +88,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    background: conic-gradient(var(--accent) calc(67 * 1%), rgba(255,255,255,0.06) 0);
+    background: conic-gradient(var(--accent) calc({pass_rate} * 1%), rgba(255,255,255,0.06) 0);
     border: 2px solid var(--border);
     box-shadow: 0 0 40px var(--glow);
   }
@@ -405,68 +405,70 @@
 
 <header class="hero">
   <div>
-    <h1>sample-project <span class="badge">TypeScript</span></h1>
-    <p class="meta">HarshwardhanPatil07/agent-fit</p>
-    <p class="description">Agent-readiness assessment plugin for Cursor and Claude Code.</p>
+    <h1>{project_name} <span class="badge">{language}</span></h1>
+    <p class="meta">{repo_path}</p>
+    <p class="description">{project_description}</p>
   </div>
-  <div class="maturity-dial" aria-label="Maturity level 1, Functional">
-    <span class="level-num">L1</span>
-    <span class="level-sub">Functional</span>
+  <div class="maturity-dial" aria-label="Maturity level {maturity_level}, {maturity_label}">
+    <span class="level-num">L{maturity_level}</span>
+    <span class="level-sub">{maturity_label}</span>
   </div>
 </header>
 
 <div class="stat-grid">
-  <div class="stat-card accent"><div class="label">Pass Rate</div><div class="value">67%</div></div>
-  <div class="stat-card"><div class="label">Weighted</div><div class="value">64%</div></div>
-  <div class="stat-card warn"><div class="label">Evaluated</div><div class="value">76</div></div>
-  <div class="stat-card"><div class="label">Skipped</div><div class="value">5</div></div>
+  <div class="stat-card accent"><div class="label">Pass Rate</div><div class="value">{pass_rate}%</div></div>
+  <div class="stat-card"><div class="label">Weighted</div><div class="value">{weighted_score}%</div></div>
+  <div class="stat-card warn"><div class="label">Evaluated</div><div class="value">{total_applicable}</div></div>
+  <div class="stat-card"><div class="label">Skipped</div><div class="value">{criteria_skipped}</div></div>
 </div>
 
 <main>
   <section class="level-section">
-    <div class="level-bar" role="progressbar" aria-valuenow="1" aria-valuemin="1" aria-valuemax="5" aria-label="Maturity level 1 of 5">
-      <div class="level-segment l1" style="width:28%"></div>
-      <div class="level-segment l2" style="width:22%"></div>
-      <div class="level-segment l3" style="width:35%"></div>
-      <div class="level-segment l4" style="width:10%"></div>
-      <div class="level-segment l5" style="width:5%"></div>
+    <div class="level-bar" role="progressbar" aria-valuenow="{maturity_level}" aria-valuemin="1" aria-valuemax="5" aria-label="Maturity level {maturity_level} of 5">
+      <div class="level-segment l1" style="width:{l1_weight}%"></div>
+      <div class="level-segment l2" style="width:{l2_weight}%"></div>
+      <div class="level-segment l3" style="width:{l3_weight}%"></div>
+      <div class="level-segment l4" style="width:{l4_weight}%"></div>
+      <div class="level-segment l5" style="width:{l5_weight}%"></div>
     </div>
     <div class="level-labels" aria-hidden="true">
-      <div class="level-label" style="width:28%"><span class="pct">92%</span> <span class="name">L1</span></div>
-      <div class="level-label" style="width:22%"><span class="pct">60%</span> <span class="name">L2</span></div>
-      <div class="level-label" style="width:35%"><span class="pct">44%</span> <span class="name">L3</span></div>
-      <div class="level-label" style="width:10%"><span class="pct">18%</span> <span class="name">L4</span></div>
-      <div class="level-label" style="width:5%"><span class="pct">0%</span> <span class="name">L5</span></div>
+      <div class="level-label" style="width:{l1_weight}%"><span class="pct">{l1_pct}%</span> <span class="name">L1</span></div>
+      <div class="level-label" style="width:{l2_weight}%"><span class="pct">{l2_pct}%</span> <span class="name">L2</span></div>
+      <div class="level-label" style="width:{l3_weight}%"><span class="pct">{l3_pct}%</span> <span class="name">L3</span></div>
+      <div class="level-label" style="width:{l4_weight}%"><span class="pct">{l4_pct}%</span> <span class="name">L4</span></div>
+      <div class="level-label" style="width:{l5_weight}%"><span class="pct">{l5_pct}%</span> <span class="name">L5</span></div>
     </div>
     <div class="level-gates">
-      <div class="gate-card pass"><span class="gate-pct">92%</span><span class="gate-name">L1 Functional</span><span class="gate-status">✓ Passed</span></div>
-      <div class="gate-card fail"><span class="gate-pct">60%</span><span class="gate-name">L2 Documented</span><span class="gate-status">✗ Below gate</span></div>
-      <div class="gate-card blocked"><span class="gate-pct">44%</span><span class="gate-name">L3 Standardized</span><span class="gate-status">Blocked by L2</span></div>
-      <div class="gate-card blocked"><span class="gate-pct">18%</span><span class="gate-name">L4 Optimized</span><span class="gate-status">Blocked by L2</span></div>
-      <div class="gate-card blocked"><span class="gate-pct">0%</span><span class="gate-name">L5 Autonomous</span><span class="gate-status">Blocked by L2</span></div>
+      <div class="gate-card {l1_gate_class}"><span class="gate-pct">{l1_pct}%</span><span class="gate-name">L1 Functional</span><span class="gate-status">{l1_gate_status}</span></div>
+      <div class="gate-card {l2_gate_class}"><span class="gate-pct">{l2_pct}%</span><span class="gate-name">L2 Documented</span><span class="gate-status">{l2_gate_status}</span></div>
+      <div class="gate-card {l3_gate_class}"><span class="gate-pct">{l3_pct}%</span><span class="gate-name">L3 Standardized</span><span class="gate-status">{l3_gate_status}</span></div>
+      <div class="gate-card {l4_gate_class}"><span class="gate-pct">{l4_pct}%</span><span class="gate-name">L4 Optimized</span><span class="gate-status">{l4_gate_status}</span></div>
+      <div class="gate-card {l5_gate_class}"><span class="gate-pct">{l5_pct}%</span><span class="gate-name">L5 Autonomous</span><span class="gate-status">{l5_gate_status}</span></div>
     </div>
   </section>
 
   <section class="summary-section">
-    <h2>Strong Testing<span class="delta-chip">+5% vs last run</span></h2>
-    <p>sample-project reaches Level 1 (Functional) with 51/76 criteria passing. Key areas for improvement include pre-commit hooks and API schema docs.</p>
+    <h2>{summary_headline}<span class="delta-chip">{pass_rate_delta_text}</span></h2>
+    <p>{summary_text}</p>
     <div class="columns">
       <div>
         <h3 class="col-header">Strengths</h3>
         <article class="highlight">
           <div class="highlight-num green">01</div>
-          <div class="highlight-title">Testing (88%)</div>
-          <div class="highlight-detail">unit_tests_exist, unit_tests_runnable, test_naming_conventions</div>
+          <div class="highlight-title">{strength_1_title}</div>
+          <div class="highlight-detail">{strength_1_detail}</div>
         </article>
-</div>
+        <!-- Repeat 02, 03 for additional strengths -->
+      </div>
       <div>
         <h3 class="col-header">Opportunities</h3>
         <article class="highlight">
           <div class="highlight-num orange">01</div>
-          <div class="highlight-title">pre_commit_hooks</div>
-          <div class="highlight-detail">Create .pre-commit-config.yaml with formatter and lint hooks.</div>
+          <div class="highlight-title">{opportunity_1_title}</div>
+          <div class="highlight-detail">{opportunity_1_detail}</div>
         </article>
-</div>
+        <!-- Repeat 02, 03 for additional opportunities -->
+      </div>
     </div>
   </section>
 
@@ -502,27 +504,23 @@
     </div>
 
     <div id="criteria-empty" class="empty-state">No criteria match the current filters. Try clearing search or changing status/level.</div>
-<section class="pillar-group">
+
+    <!-- Repeat for each pillar (9 total) -->
+    <section class="pillar-group">
       <div class="pillar-header toggle" role="button" tabindex="0" aria-expanded="true">
         <span class="chevron" aria-hidden="true">▼</span>
-        <span class="pillar-name">Style & Validation</span>
-        <div class="pillar-mini-bar" aria-hidden="true"><span style="width:62%"></span></div>
-        <span class="pillar-score">8/13 (62%)</span>
+        <span class="pillar-name">{pillar_name}</span>
+        <div class="pillar-mini-bar" aria-hidden="true"><span style="width:{percentage}%"></span></div>
+        <span class="pillar-score">{passed}/{total} ({percentage}%)</span>
       </div>
       <div class="pillar-body">
-<div class="criterion-row" data-status="found" data-level="1" data-name="formatter">
-          <span class="status-icon pass" aria-label="Passed">✓</span>
-          <span class="level-tag">L1</span>
-          <span class="criterion-name">formatter</span>
-          <span class="criterion-score">1/1</span>
-          <span class="criterion-evidence">Found .prettierrc with semi and singleQuote rules</span>
-        </div>
-        <div class="criterion-row changed" data-status="missing" data-level="2" data-name="pre_commit_hooks">
-          <span class="status-icon fail" aria-label="Failed">✗</span>
-          <span class="level-tag">L2</span>
-          <span class="criterion-name">pre_commit_hooks</span>
-          <span class="criterion-score">0/1</span>
-          <span class="criterion-evidence">Changed from found → missing: no .pre-commit-config.yaml</span>
+        <!-- Repeat for each criterion in this pillar, alphabetically by name -->
+        <div class="criterion-row {changed_class}" data-status="{found|missing|skipped}" data-level="{level}" data-name="{criterion_name}">
+          <span class="status-icon {pass|fail|skip}" aria-label="{pass: Passed|fail: Failed|skip: Skipped}">{✓|✗|—}</span>
+          <span class="level-tag">L{level}</span>
+          <span class="criterion-name">{criterion_name}</span>
+          <span class="criterion-score">{1/1|0/1|—/—}</span>
+          <span class="criterion-evidence">{evidence_text}</span>
         </div>
       </div>
     </section>
@@ -532,27 +530,27 @@
 <footer class="report-footer">
   <div class="footer-item">
     <span class="footer-label">Assessment date</span>
-    <span class="footer-value">2026-05-18T12:00:00Z</span>
+    <span class="footer-value">{assessment_date}</span>
   </div>
   <div class="footer-item">
     <span class="footer-label">Skill version</span>
-    <span class="footer-value">1.0.0</span>
+    <span class="footer-value">{plugin_version}</span>
   </div>
   <div class="footer-item">
     <span class="footer-label">Criteria evaluated</span>
-    <span class="footer-value">76</span>
+    <span class="footer-value">{total_applicable}</span>
   </div>
   <div class="footer-item">
     <span class="footer-label">Criteria skipped</span>
-    <span class="footer-value">5</span>
+    <span class="footer-value">{criteria_skipped}</span>
   </div>
   <div class="footer-item">
     <span class="footer-label">Git SHA</span>
-    <span class="footer-value">abc1234</span>
+    <span class="footer-value">{git_sha}</span>
   </div>
   <div class="footer-item">
     <span class="footer-label">Assessment duration</span>
-    <span class="footer-value">32s</span>
+    <span class="footer-value">{assessment_duration}</span>
   </div>
   <p class="brand-line">Generated by Agent Fit · agent-readiness assessment</p>
 </footer>
