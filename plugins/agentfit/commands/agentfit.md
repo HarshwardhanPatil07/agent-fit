@@ -33,6 +33,17 @@ If a previous report exists at `/tmp/agentfit-report-{project_name}.json`, load 
 
 If no previous report exists, evaluate all criteria fresh.
 
+### Custom Criteria Configuration
+
+Check for `.agentfit.yml` at the repository root. If found, parse it:
+
+- **`custom_criteria`**: Array of additional criteria to evaluate alongside built-ins. Each entry has:
+  - `name` (snake_case identifier), `pillar` (1-9), `level` (1-5), `check` (what to look for), `found_when` (pass condition), `impact` (`high`|`medium`|`low`, default: `medium`)
+  - Evaluate each custom criterion using the same signal types as built-in criteria. Include results in the matching pillar's output.
+- **`disabled_criteria`**: Array of built-in criterion names to force-skip. Mark each as `—/—` with evidence "Disabled via .agentfit.yml".
+
+If no `.agentfit.yml` exists, skip this step.
+
 ## Step 2: Evaluate All Criteria
 
 Evaluate each criterion below using the specified signal type. For each criterion, record:
@@ -277,6 +288,16 @@ For each pillar, calculate:
 - `total_applicable` = sum of all `criteria_total` across all pillars
 - `pass_rate` = round(`total_passed` / `total_applicable` * 100)
 
+### Weighted Score
+
+Each criterion has an impact tier that determines its weight in the weighted score:
+
+- **High (weight 3):** type_check, strict_typing, unit_tests_exist, deps_pinned, branch_protection, secrets_management, gitignore_comprehensive, automated_security_review, secret_scanning
+- **Medium (weight 2):** All criteria not listed as high or low (including custom criteria with `impact: medium` or unspecified impact)
+- **Low (weight 1):** duplicate_code_detection, tech_debt_tracking, naming_consistency, service_flow_documented, test_performance_tracking, profiling_instrumentation, runbooks_documented
+
+Custom criteria from `.agentfit.yml` use their specified `impact` tier. Calculate: `weighted_score = round(sum(passed_criterion_weight) / sum(applicable_criterion_weight) * 100)`. Display alongside the unweighted pass rate.
+
 ### Maturity Level Calculation
 
 Each criterion is assigned to a maturity level (L1-L5). Calculate completion percentage for each level using only the criteria assigned to that level.
@@ -301,7 +322,7 @@ Each criterion is assigned to a maturity level (L1-L5). Calculate completion per
 
 **Strengths (top 3):** Select the 3 pillars with the highest percentage scores. For each, list the pillar name with percentage and 2-3 key passing criteria as evidence.
 
-**Opportunities (top 3):** Select the 3 most impactful MISSING criteria, prioritized by maturity level (L1 gaps first, then L2, then L3, etc.). Within a level, prioritize criteria from the pillar with the lowest pass rate. Within the same pillar, prioritize alphabetically by criterion name. For each, provide the criterion name and a specific remediation action.
+**Opportunities (top 3):** Select the 3 most impactful MISSING criteria, prioritized by maturity level (L1 gaps first, then L2, then L3, etc.). Within a level, prioritize criteria from the pillar with the lowest pass rate. Within the same pillar, prioritize alphabetically by criterion name. For each, provide the criterion name, a specific remediation action, and a concrete fix instruction (e.g., "Create `.pre-commit-config.yaml` with a formatter hook", "Add `dependabot.yml` with weekly update schedule", "Create `AGENTS.md` documenting build commands and test workflow"). The fix instruction should be immediately actionable — a single file to create or config to add.
 
 ### Summary Headline
 
@@ -324,8 +345,13 @@ After writing the file, open it with: `open /tmp/agentfit-report-{project_name}.
 Also write the assessment data as JSON to `/tmp/agentfit-report-{project_name}.json` with this structure:
 ```json
 {
+  "schema_version": "1.0.0",
+  "skill_version": "1.0.0",
   "project_name": "{project_name}",
   "timestamp": "{ISO 8601 timestamp}",
+  "pass_rate": {pass_rate},
+  "weighted_score": {weighted_score},
+  "maturity_level": {maturity_level},
   "criteria": {
     "{criterion_name}": { "status": "found|missing|skipped", "evidence": "..." }
   }
@@ -548,7 +574,7 @@ The HTML report MUST use this structure with inline CSS. Replace all `{placehold
 
 <header>
   <h1>{project_name} <span class="badge">{language}</span></h1>
-  <p class="meta">{repo_path}&nbsp;&nbsp;&nbsp;PASS RATE {pass_rate}%</p>
+  <p class="meta">{repo_path}&nbsp;&nbsp;&nbsp;PASS RATE {pass_rate}%&nbsp;&nbsp;·&nbsp;&nbsp;WEIGHTED {weighted_score}%</p>
   <p class="description">{project_description}</p>
 </header>
 
@@ -620,6 +646,10 @@ The HTML report MUST use this structure with inline CSS. Replace all `{placehold
   </section>
 </main>
 
+<footer style="margin-top:48px;padding-top:24px;border-top:1px solid #1a1a2e;font-size:0.75rem;color:#666;font-family:monospace;">
+  Agent Fit v1.0.0 · {assessment_date} · {git_sha} · {total_evaluated} criteria evaluated · {total_skipped} skipped
+</footer>
+
 </body>
 </html>
 ```
@@ -632,7 +662,7 @@ After opening the HTML report, print a brief summary to the console:
 
 ```
 Agent Fit Report: {project_name}
-Pass Rate: {pass_rate}% | Level: L{maturity_level} ({maturity_label})
+Pass Rate: {pass_rate}% | Weighted: {weighted_score}% | Level: L{maturity_level} ({maturity_label})
 Report: /tmp/agentfit-report-{project_name}.html
 
 Pillars:
@@ -646,3 +676,4 @@ Pillars:
   Task Discovery:           {p8_passed}/{p8_total} ({p8_pct}%)
   Product & Analytics:      {p9_passed}/{p9_total} ({p9_pct}%)
 ```
+
