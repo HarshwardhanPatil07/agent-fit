@@ -6,3 +6,21 @@ Thumbs.db
 .vscode/
 .idea/
 .env*
+
+# Local editor / agent tooling (do not commit)
+.cursor/
+.claude/
+
+# Local Spec Kit feature docs (keep on disk, omit from PRs)
+specs/002-assessment-output-consumability/
+
+# Spec Kit scaffolding (keep local; upstream only tracks minimal .specify/)
+.specify/extensions/
+.specify/integrations/
+.specify/scripts/
+.specify/templates/
+.specify/workflows/
+.specify/extensions.yml
+.specify/init-options.json
+.specify/integration.json
+.specify/.registry
