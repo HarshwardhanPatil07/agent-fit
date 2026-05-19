@@ -22,6 +22,7 @@ The top-level output entity.
 | pillars | Pillar[] | Array of 9 pillar results |
 | strengths | Highlight[] | Top 3 strengths (highest-scoring areas) |
 | opportunities | Highlight[] | Top 3 opportunities (highest-impact gaps) |
+| remediation | Remediation[] | Complete remediation roadmap for all missing criteria |
 | level_progress | LevelProgress[] | L1-L5 completion percentages |
 
 ### Pillar
@@ -65,6 +66,16 @@ The top-level output entity.
 | number | number | Display order (01, 02, 03) |
 | title | string | Short title (e.g., "Testing (100%)") |
 | detail | string | Supporting evidence sentence |
+
+### Remediation
+
+| Field | Type | Description |
+|-------|------|-------------|
+| criterion | string | snake_case criterion name |
+| level | number | Maturity level this criterion belongs to (1-5) |
+| pillar | string | Parent pillar display name |
+| impact | string | high, medium, or low (from weighted scoring tiers) |
+| fix | string | Language-aware, immediately actionable fix instruction |
 
 ### LevelProgress
 
@@ -132,6 +143,7 @@ The top-level output entity.
 ```
 AssessmentReport 1───* Pillar 1───* Criterion
 AssessmentReport 1───* Highlight
+AssessmentReport 1───* Remediation
 AssessmentReport 1───* LevelProgress
 ```
 

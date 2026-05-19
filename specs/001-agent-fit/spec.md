@@ -130,7 +130,7 @@ After seeing the report, the developer wants to know what to fix first for maxim
 - Flaky test detection
 - Test performance tracking
 
-### Pillar 4: Documentation (8 criteria)
+### Pillar 4: Documentation (10 criteria)
 
 - README exists and is comprehensive
 - AGENTS.md or CLAUDE.md exists
@@ -140,6 +140,8 @@ After seeing the report, the developer wants to know what to fix first for maxim
 - API schema docs (OpenAPI, GraphQL, protobuf)
 - Service flow/architecture diagrams
 - Agent skills configured
+- Changelog maintained
+- Doc examples tested
 
 ### Pillar 5: Development Environment (5 criteria)
 
@@ -163,7 +165,7 @@ After seeing the report, the developer wants to know what to fix first for maxim
 - Circuit breakers implemented
 - Runbooks documented
 
-### Pillar 7: Security and Governance (11 criteria)
+### Pillar 7: Security and Governance (13 criteria)
 
 - Branch protection enabled
 - CODEOWNERS defined
@@ -176,6 +178,8 @@ After seeing the report, the developer wants to know what to fix first for maxim
 - PII handling and classification
 - DAST scanning
 - Privacy compliance enforcement
+- Container image scanning
+- SBOM generation
 
 ### Pillar 8: Task Discovery (4 criteria)
 
