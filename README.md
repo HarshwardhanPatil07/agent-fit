@@ -1,4 +1,4 @@
-# Agent-Fit
+# agent-fit: Agent-First Software Vision
 
 Do you think next people on internet will be AI agents and now is the time to make something agents want?
 
