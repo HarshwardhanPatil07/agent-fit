@@ -789,6 +789,21 @@ The HTML report MUST use this structure with inline CSS and inline JavaScript (z
   }
   .empty-state.visible { display: block; }
 
+  .pillar-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    background: rgba(255,255,255,0.02);
+  }
+
+  #tab-remediation .criterion-row {
+    grid-template-columns: 28px 1fr 72px minmax(0, 2fr);
+  }
+  #tab-remediation .criterion-score.impact-high { color: var(--fail); font-weight: 600; }
+  #tab-remediation .criterion-score.impact-medium { color: var(--warn); font-weight: 600; }
+  #tab-remediation .criterion-score.impact-low { color: var(--muted); }
+
   footer.report-footer {
     margin-top: 40px;
     padding: 24px 28px;
@@ -842,7 +857,7 @@ The HTML report MUST use this structure with inline CSS and inline JavaScript (z
   .tab-nav {
     display: flex;
     gap: 0;
-    border-bottom: 1px solid #1a1a2e;
+    border-bottom: 1px solid var(--border);
     margin-bottom: 32px;
     margin-top: 24px;
   }
@@ -850,20 +865,20 @@ The HTML report MUST use this structure with inline CSS and inline JavaScript (z
     background: none;
     border: none;
     border-bottom: 2px solid transparent;
-    color: #666;
-    font-family: monospace;
+    color: var(--muted);
+    font-family: ui-monospace, monospace;
     font-size: 0.8rem;
     font-weight: 600;
-    letter-spacing: 1.5px;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
     padding: 12px 24px;
     cursor: pointer;
     transition: color 0.2s, border-color 0.2s;
   }
-  .tab-btn:hover { color: #ccc; }
+  .tab-btn:hover { color: var(--text); }
   .tab-btn.active {
-    color: #ffffff;
-    border-bottom-color: #4caf50;
+    color: #fff;
+    border-bottom-color: var(--accent);
   }
   .tab-panel { display: none; }
   .tab-panel.active { display: block; }
@@ -1011,7 +1026,8 @@ The HTML report MUST use this structure with inline CSS and inline JavaScript (z
   <div class="tab-panel" id="tab-remediation">
 
   <section class="criteria-section" style="margin-top:0;border-top:none;padding-top:0;">
-    <h2 class="criteria-header">REMEDIATION ROADMAP</h2>
+    <h2 class="criteria-header">Remediation Roadmap</h2>
+    <p id="remediation-count" style="font-family:ui-monospace,monospace;font-size:0.72rem;color:var(--muted);margin-bottom:20px;">{remediation_count} actionable fixes across missing criteria</p>
 
     <!-- For each maturity level (L1→L5) with missing criteria: -->
     <section class="pillar-group">
@@ -1019,12 +1035,14 @@ The HTML report MUST use this structure with inline CSS and inline JavaScript (z
         <span class="pillar-name">Level {N} — {level_label}</span>
         <span class="pillar-score">{missing_count} gaps</span>
       </div>
-      <!-- For each missing criterion at this level, ordered by impact (high→medium→low): -->
-      <div class="criterion-row">
-        <span class="status-icon fail" aria-label="Missing">▸</span>
-        <span class="criterion-name">{criterion_name}</span>
-        <span class="criterion-score">{impact}</span>
-        <span class="criterion-evidence">{fix_instruction}</span>
+      <div class="pillar-body">
+        <!-- For each missing criterion at this level, ordered by impact (high→medium→low): -->
+        <div class="criterion-row">
+          <span class="status-icon fail" aria-label="Missing">▸</span>
+          <span class="criterion-name">{criterion_name}</span>
+          <span class="criterion-score impact-{high|medium|low}">{impact}</span>
+          <span class="criterion-evidence">{fix_instruction}</span>
+        </div>
       </div>
     </section>
   </section>
@@ -1061,14 +1079,99 @@ The HTML report MUST use this structure with inline CSS and inline JavaScript (z
 </footer>
 
 <script>
-document.querySelectorAll('.tab-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-    btn.classList.add('active');
-    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+(() => {
+  const buttons = Array.from(document.querySelectorAll('.filter-btn'));
+  const searchInput = document.getElementById('criteria-search');
+  const clearSearch = document.getElementById('clear-search');
+  const levelSelect = document.getElementById('level-filter');
+  const filterCount = document.getElementById('filter-count');
+  const emptyState = document.getElementById('criteria-empty');
+  const toolbar = document.getElementById('criteria-toolbar');
+  const rows = Array.from(document.querySelectorAll('#tab-assessment .criterion-row'));
+  const groups = Array.from(document.querySelectorAll('#tab-assessment .pillar-group'));
+  const totalRows = rows.length;
+  let statusFilter = 'all';
+
+  const applyFilters = () => {
+    let visibleCount = 0;
+    rows.forEach((row) => {
+      const matchesStatus = statusFilter === 'all' || row.dataset.status === statusFilter;
+      const matchesLevel = levelSelect.value === 'all' || row.dataset.level === levelSelect.value;
+      const query = (searchInput.value || '').trim().toLowerCase();
+      const matchesQuery = !query || (row.dataset.name || '').toLowerCase().includes(query);
+      const visible = matchesStatus && matchesLevel && matchesQuery;
+      row.style.display = visible ? '' : 'none';
+      if (visible) visibleCount += 1;
+    });
+    groups.forEach((group) => {
+      const anyVisible = Array.from(group.querySelectorAll('.criterion-row')).some((row) => row.style.display !== 'none');
+      group.style.display = anyVisible ? '' : 'none';
+    });
+    emptyState.classList.toggle('visible', visibleCount === 0);
+    filterCount.textContent = visibleCount === totalRows
+      ? `Showing all ${totalRows} criteria`
+      : `Showing ${visibleCount} of ${totalRows} criteria`;
+  };
+
+  buttons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      statusFilter = btn.dataset.status || 'all';
+      buttons.forEach((b) => b.classList.toggle('active', b === btn));
+      applyFilters();
+    });
   });
-});
+  searchInput.addEventListener('input', applyFilters);
+  clearSearch.addEventListener('click', () => { searchInput.value = ''; searchInput.focus(); applyFilters(); });
+  levelSelect.addEventListener('change', applyFilters);
+
+  const setAllCollapsed = (collapsed) => {
+    groups.forEach((group) => {
+      const header = group.querySelector('.pillar-header.toggle');
+      group.classList.toggle('collapsed', collapsed);
+      if (header) header.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    });
+  };
+  document.getElementById('expand-all').addEventListener('click', () => setAllCollapsed(false));
+  document.getElementById('collapse-all').addEventListener('click', () => setAllCollapsed(true));
+
+  groups.forEach((group) => {
+    const header = group.querySelector('.pillar-header.toggle');
+    if (!header) return;
+    const toggle = () => {
+      const collapsed = group.classList.toggle('collapsed');
+      header.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    };
+    header.addEventListener('click', toggle);
+    header.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        toggle();
+      }
+    });
+  });
+
+  window.addEventListener('scroll', () => {
+    toolbar.classList.toggle('is-scrolled', window.scrollY > 80);
+  }, { passive: true });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === '/' && document.activeElement !== searchInput) {
+      event.preventDefault();
+      searchInput.focus();
+    }
+  });
+
+  applyFilters();
+
+  document.querySelectorAll('.tab-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach((p) => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    });
+  });
+})();
 </script>
 </body>
 </html>

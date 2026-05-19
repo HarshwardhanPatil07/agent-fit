@@ -359,6 +359,50 @@
   }
   .empty-state.visible { display: block; }
 
+  .pillar-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    background: rgba(255,255,255,0.02);
+  }
+
+  .tab-nav {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 32px;
+    margin-top: 24px;
+  }
+  .tab-btn {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--muted);
+    font-family: ui-monospace, monospace;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 12px 24px;
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s;
+  }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active {
+    color: #fff;
+    border-bottom-color: var(--accent);
+  }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  #tab-remediation .criterion-row {
+    grid-template-columns: 28px 1fr 72px minmax(0, 2fr);
+  }
+  #tab-remediation .criterion-score.impact-high { color: var(--fail); font-weight: 600; }
+  #tab-remediation .criterion-score.impact-medium { color: var(--warn); font-weight: 600; }
+  #tab-remediation .criterion-score.impact-low { color: var(--muted); }
+
   footer.report-footer {
     margin-top: 40px;
     padding: 24px 28px;
@@ -456,6 +500,13 @@
     </div>
   </section>
 
+  <nav class="tab-nav" aria-label="Report sections">
+    <button type="button" class="tab-btn active" data-tab="assessment">Assessment</button>
+    <button type="button" class="tab-btn" data-tab="remediation">Remediation</button>
+  </nav>
+
+  <div class="tab-panel active" id="tab-assessment">
+
   <section class="summary-section">
     <h2>{summary_headline}<span class="delta-chip">{pass_rate_delta_text}</span></h2>
     <p>{summary_text}</p>
@@ -534,6 +585,34 @@
       </div>
     </section>
   </section>
+
+  </div><!-- /tab-assessment -->
+
+  <div class="tab-panel" id="tab-remediation">
+
+  <section class="criteria-section" style="margin-top:0;border-top:none;padding-top:0;">
+    <h2 class="criteria-header">Remediation Roadmap</h2>
+    <p id="remediation-count" style="font-family:ui-monospace,monospace;font-size:0.72rem;color:var(--muted);margin-bottom:20px;">{remediation_count} actionable fixes across missing criteria</p>
+
+    <!-- Repeat for each maturity level (L1→L5) with missing criteria -->
+    <section class="pillar-group">
+      <div class="pillar-header">
+        <span class="pillar-name">Level {N} — {level_label}</span>
+        <span class="pillar-score">{missing_count} gaps</span>
+      </div>
+      <div class="pillar-body">
+        <!-- Repeat for each missing criterion at this level, ordered by impact (high→medium→low) -->
+        <div class="criterion-row">
+          <span class="status-icon fail" aria-label="Missing">▸</span>
+          <span class="criterion-name">{criterion_name}</span>
+          <span class="criterion-score impact-{high|medium|low}">{impact}</span>
+          <span class="criterion-evidence">{fix_instruction}</span>
+        </div>
+      </div>
+    </section>
+  </section>
+
+  </div><!-- /tab-remediation -->
 </main>
 
 <footer class="report-footer">
@@ -575,8 +654,8 @@
   const filterCount = document.getElementById('filter-count');
   const emptyState = document.getElementById('criteria-empty');
   const toolbar = document.getElementById('criteria-toolbar');
-  const rows = Array.from(document.querySelectorAll('.criterion-row'));
-  const groups = Array.from(document.querySelectorAll('.pillar-group'));
+  const rows = Array.from(document.querySelectorAll('#tab-assessment .criterion-row'));
+  const groups = Array.from(document.querySelectorAll('#tab-assessment .pillar-group'));
   const totalRows = rows.length;
   let statusFilter = 'all';
 
@@ -650,6 +729,15 @@
   });
 
   applyFilters();
+
+  document.querySelectorAll('.tab-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach((p) => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    });
+  });
 })();
 </script>
 </body>
