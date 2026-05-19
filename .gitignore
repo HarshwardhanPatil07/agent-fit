@@ -6,6 +6,18 @@ Thumbs.db
 .vscode/
 .idea/
 .env*
+
+# Local editor / agent tooling (do not commit)
 .cursor/
 .claude/
-.specify/
+
+# Spec Kit scaffolding (keep local; upstream only tracks minimal .specify/)
+.specify/extensions/
+.specify/integrations/
+.specify/scripts/
+.specify/templates/
+.specify/workflows/
+.specify/extensions.yml
+.specify/init-options.json
+.specify/integration.json
+.specify/.registry
