@@ -11,6 +11,9 @@ Thumbs.db
 .cursor/
 .claude/
 
+# Local Spec Kit feature docs (keep on disk, omit from PRs)
+specs/002-assessment-output-consumability/
+
 # Spec Kit scaffolding (keep local; upstream only tracks minimal .specify/)
 .specify/extensions/
 .specify/integrations/

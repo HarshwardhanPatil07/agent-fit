@@ -933,8 +933,8 @@ The HTML report MUST use this structure with inline CSS and inline JavaScript (z
 
   <!-- TAB NAVIGATION -->
   <nav class="tab-nav">
-    <button class="tab-btn active" data-tab="assessment">Assessment</button>
-    <button class="tab-btn" data-tab="remediation">Remediation</button>
+    <button type="button" class="tab-btn active" data-tab="assessment">Assessment</button>
+    <button type="button" class="tab-btn" data-tab="remediation">Remediation</button>
   </nav>
 
   <!-- ASSESSMENT TAB -->
