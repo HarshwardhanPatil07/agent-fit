@@ -7,8 +7,8 @@
   "extraKnownMarketplaces": {
     "agent-fit": {
       "source": {
-        "source": "git",
-        "url": "git@github.com:HarshwardhanPatil07/agent-fit.git"
+        "source": "directory",
+        "path": "./"
       }
     }
   },

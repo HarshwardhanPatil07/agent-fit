@@ -441,7 +441,6 @@ The HTML report MUST use this structure with inline CSS and inline JavaScript (z
     --warn: #f0b429;
     --fail: #ff6b4a;
     --skip: #5a6078;
-    --glow: rgba(110, 231, 168, 0.35);
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -506,20 +505,19 @@ The HTML report MUST use this structure with inline CSS and inline JavaScript (z
   }
   .description { font-size: 0.9rem; color: var(--muted); margin-top: 10px; max-width: 52ch; }
 
-  .maturity-dial {
-    width: 120px;
-    height: 120px;
-    border-radius: 50%;
+  .maturity-badge {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    background: conic-gradient(var(--accent) calc({pass_rate} * 1%), rgba(255,255,255,0.06) 0);
-    border: 2px solid var(--border);
-    box-shadow: 0 0 40px var(--glow);
+    min-width: 100px;
+    padding: 16px 20px;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: rgba(12, 14, 28, 0.65);
   }
-  .maturity-dial .level-num { font-size: 2rem; font-weight: 700; color: #fff; line-height: 1; }
-  .maturity-dial .level-sub { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); }
+  .maturity-badge .level-num { font-size: 2rem; font-weight: 700; color: #fff; line-height: 1; }
+  .maturity-badge .level-sub { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); margin-top: 4px; }
 
   .stat-grid {
     display: grid;
@@ -685,7 +683,18 @@ The HTML report MUST use this structure with inline CSS and inline JavaScript (z
   .search-wrap { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 180px; max-width: 280px; }
   .search-wrap input { flex: 1; border-radius: 999px; padding-left: 14px; }
   .search-wrap input::placeholder { color: var(--muted); }
-  .toolbar select { border-radius: 10px; padding-right: 28px; cursor: pointer; }
+  .toolbar select {
+    border-radius: 10px;
+    padding-right: 28px;
+    cursor: pointer;
+    color-scheme: dark;
+    background-color: rgba(12, 14, 28, 0.95);
+    color: var(--text);
+  }
+  .toolbar select option {
+    background-color: #12162a;
+    color: var(--text);
+  }
   .toolbar-actions { display: flex; gap: 6px; margin-left: auto; }
   .ghost-btn { font-size: 0.72rem; }
 
@@ -811,7 +820,7 @@ The HTML report MUST use this structure with inline CSS and inline JavaScript (z
 
   @media (max-width: 768px) {
     .hero { grid-template-columns: 1fr; text-align: center; }
-    .maturity-dial { margin: 0 auto; }
+    .maturity-badge { margin: 0 auto; }
     .columns { grid-template-columns: 1fr; }
     .level-gates { grid-template-columns: repeat(2, 1fr); }
     .criterion-row { grid-template-columns: 24px 44px 1fr; }
@@ -835,7 +844,7 @@ The HTML report MUST use this structure with inline CSS and inline JavaScript (z
     <p class="meta">{repo_path}</p>
     <p class="description">{project_description}</p>
   </div>
-  <div class="maturity-dial" aria-label="Maturity level {maturity_level}, {maturity_label}">
+  <div class="maturity-badge" aria-label="Maturity level {maturity_level}, {maturity_label}">
     <span class="level-num">L{maturity_level}</span>
     <span class="level-sub">{maturity_label}</span>
   </div>
