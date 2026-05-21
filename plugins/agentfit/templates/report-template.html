@@ -403,6 +403,18 @@
   #tab-remediation .criterion-score.impact-medium { color: var(--warn); font-weight: 600; }
   #tab-remediation .criterion-score.impact-low { color: var(--muted); }
 
+  #tab-consumer .stat-grid { margin-bottom: 28px; }
+  #tab-consumer .summary-section { margin-bottom: 40px; }
+
+  .section-divider {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #fff;
+    margin: 40px 0 20px;
+    padding-top: 28px;
+    border-top: 1px solid var(--border);
+  }
+
   footer.report-footer {
     margin-top: 40px;
     padding: 24px 28px;
@@ -502,6 +514,7 @@
 
   <nav class="tab-nav" aria-label="Report sections">
     <button type="button" class="tab-btn active" data-tab="assessment">Assessment</button>
+    <button type="button" class="tab-btn" data-tab="consumer">Agent as User</button>
     <button type="button" class="tab-btn" data-tab="remediation">Remediation</button>
   </nav>
 
@@ -588,6 +601,121 @@
 
   </div><!-- /tab-assessment -->
 
+  <!-- AGENT-AS-USER TAB -->
+  <div class="tab-panel" id="tab-consumer">
+
+  <div class="stat-grid">
+    <div class="stat-card accent"><div class="label">Pass Rate</div><div class="value">{v2_pass_rate}%</div></div>
+    <div class="stat-card"><div class="label">Weighted</div><div class="value">{v2_weighted_score}%</div></div>
+    <div class="stat-card warn"><div class="label">Evaluated</div><div class="value">{v2_total_applicable}</div></div>
+    <div class="stat-card"><div class="label">Skipped</div><div class="value">{v2_criteria_skipped}</div></div>
+  </div>
+
+  <section class="level-section">
+    <div class="level-bar" role="progressbar" aria-valuenow="{v2_maturity_level}" aria-valuemin="1" aria-valuemax="5" aria-label="Agent-as-User maturity level {v2_maturity_level} of 5">
+      <div class="level-segment l1" style="width:{v2_l1_weight}%"></div>
+      <div class="level-segment l2" style="width:{v2_l2_weight}%"></div>
+      <div class="level-segment l3" style="width:{v2_l3_weight}%"></div>
+      <div class="level-segment l4" style="width:{v2_l4_weight}%"></div>
+      <div class="level-segment l5" style="width:{v2_l5_weight}%"></div>
+    </div>
+    <div class="level-labels" aria-hidden="true">
+      <div class="level-label" style="width:{v2_l1_weight}%"><span class="pct">{v2_l1_pct}%</span> <span class="name">L1</span></div>
+      <div class="level-label" style="width:{v2_l2_weight}%"><span class="pct">{v2_l2_pct}%</span> <span class="name">L2</span></div>
+      <div class="level-label" style="width:{v2_l3_weight}%"><span class="pct">{v2_l3_pct}%</span> <span class="name">L3</span></div>
+      <div class="level-label" style="width:{v2_l4_weight}%"><span class="pct">{v2_l4_pct}%</span> <span class="name">L4</span></div>
+      <div class="level-label" style="width:{v2_l5_weight}%"><span class="pct">{v2_l5_pct}%</span> <span class="name">L5</span></div>
+    </div>
+    <div class="level-gates">
+      <div class="gate-card {v2_l1_gate_class}"><span class="gate-pct">{v2_l1_pct}%</span><span class="gate-name">L1 Accessible</span><span class="gate-status">{v2_l1_gate_status}</span></div>
+      <div class="gate-card {v2_l2_gate_class}"><span class="gate-pct">{v2_l2_pct}%</span><span class="gate-name">L2 Documented</span><span class="gate-status">{v2_l2_gate_status}</span></div>
+      <div class="gate-card {v2_l3_gate_class}"><span class="gate-pct">{v2_l3_pct}%</span><span class="gate-name">L3 Optimized</span><span class="gate-status">{v2_l3_gate_status}</span></div>
+      <div class="gate-card {v2_l4_gate_class}"><span class="gate-pct">{v2_l4_pct}%</span><span class="gate-name">L4 Autonomous</span><span class="gate-status">{v2_l4_gate_status}</span></div>
+      <div class="gate-card {v2_l5_gate_class}"><span class="gate-pct">{v2_l5_pct}%</span><span class="gate-name">L5 Agent-First</span><span class="gate-status">{v2_l5_gate_status}</span></div>
+    </div>
+  </section>
+
+  <section class="summary-section">
+    <h2>{v2_summary_headline}</h2>
+    <p>{v2_summary_text}</p>
+    <div class="columns">
+      <div>
+        <h3 class="col-header">Strengths</h3>
+        <article class="highlight">
+          <div class="highlight-num green">01</div>
+          <div class="highlight-title">{v2_strength_1_title}</div>
+          <div class="highlight-detail">{v2_strength_1_detail}</div>
+        </article>
+        <!-- Repeat 02, 03 for additional v2 strengths -->
+      </div>
+      <div>
+        <h3 class="col-header">Opportunities</h3>
+        <article class="highlight">
+          <div class="highlight-num orange">01</div>
+          <div class="highlight-title">{v2_opportunity_1_title}</div>
+          <div class="highlight-detail">{v2_opportunity_1_detail}</div>
+        </article>
+        <!-- Repeat 02, 03 for additional v2 opportunities -->
+      </div>
+    </div>
+  </section>
+
+  <section class="criteria-section">
+    <div class="criteria-top">
+      <h2 class="criteria-header">All Criteria</h2>
+      <span id="consumer-filter-count">Showing all criteria</span>
+    </div>
+
+    <div class="toolbar" id="consumer-criteria-toolbar">
+      <div class="filter-group">
+        <button type="button" class="filter-btn active" data-status="all">Show All</button>
+        <button type="button" class="filter-btn" data-status="found">Found</button>
+        <button type="button" class="filter-btn" data-status="missing">Missing</button>
+        <button type="button" class="filter-btn" data-status="skipped">Skipped</button>
+      </div>
+      <div class="search-wrap">
+        <input id="consumer-criteria-search" type="search" placeholder="Search criteria by name…" aria-label="Search agent-as-user criteria">
+        <button type="button" class="ghost-btn" id="consumer-clear-search" title="Clear search">✕</button>
+      </div>
+      <select id="consumer-level-filter" aria-label="Filter by maturity level">
+        <option value="all">All Levels</option>
+        <option value="1">Level 1 — Accessible</option>
+        <option value="2">Level 2 — Documented</option>
+        <option value="3">Level 3 — Optimized</option>
+        <option value="4">Level 4 — Autonomous</option>
+        <option value="5">Level 5 — Agent-First</option>
+      </select>
+      <div class="toolbar-actions">
+        <button type="button" class="ghost-btn" id="consumer-expand-all">Expand all</button>
+        <button type="button" class="ghost-btn" id="consumer-collapse-all">Collapse all</button>
+      </div>
+    </div>
+
+    <div id="consumer-criteria-empty" class="empty-state">No criteria match the current filters. Try clearing search or changing status/level.</div>
+
+    <!-- Repeat for each v2 pillar (5 total) -->
+    <section class="pillar-group">
+      <div class="pillar-header toggle" role="button" tabindex="0" aria-expanded="true">
+        <span class="chevron" aria-hidden="true">▼</span>
+        <span class="pillar-name">{v2_pillar_name}</span>
+        <div class="pillar-mini-bar" aria-hidden="true"><span style="width:{v2_percentage}%"></span></div>
+        <span class="pillar-score">{v2_passed}/{v2_total} ({v2_percentage}%)</span>
+      </div>
+      <div class="pillar-body">
+        <!-- Repeat for each criterion in this v2 pillar -->
+        <div class="criterion-row {changed_class}" data-status="{found|missing|skipped}" data-level="{level}" data-name="{criterion_name}">
+          <span class="status-icon {pass|fail|skip}" aria-label="{pass: Passed|fail: Failed|skip: Skipped}">{✓|✗|—}</span>
+          <span class="level-tag">L{level}</span>
+          <span class="criterion-name">{criterion_name}</span>
+          <span class="criterion-score">{1/1|0/1|—/—}</span>
+          <span class="criterion-evidence">{evidence_text}</span>
+        </div>
+      </div>
+    </section>
+  </section>
+
+  </div><!-- /tab-consumer -->
+
   <div class="tab-panel" id="tab-remediation">
 
   <section class="criteria-section" style="margin-top:0;border-top:none;padding-top:0;">
@@ -612,6 +740,29 @@
     </section>
   </section>
 
+  <!-- V2 Agent-as-User Remediation -->
+  <section class="criteria-section" style="margin-top:40px;border-top:1px solid var(--border);padding-top:28px;">
+    <h2 class="criteria-header">Agent-as-User Remediation Roadmap</h2>
+    <p style="font-family:ui-monospace,monospace;font-size:0.72rem;color:var(--muted);margin-bottom:20px;">{v2_remediation_count} actionable fixes for agent-as-user criteria</p>
+
+    <!-- For each v2 maturity level (L1→L5) with missing criteria -->
+    <section class="pillar-group">
+      <div class="pillar-header">
+        <span class="pillar-name">Level {N} — {v2_level_label}</span>
+        <span class="pillar-score">{v2_missing_count} gaps</span>
+      </div>
+      <div class="pillar-body">
+        <!-- For each missing v2 criterion at this level, ordered by impact (high→medium→low) -->
+        <div class="criterion-row">
+          <span class="status-icon fail" aria-label="Missing">▸</span>
+          <span class="criterion-name">{criterion_name}</span>
+          <span class="criterion-score impact-{high|medium|low}">{impact}</span>
+          <span class="criterion-evidence">{fix_instruction}</span>
+        </div>
+      </div>
+    </section>
+  </section>
+
   </div><!-- /tab-remediation -->
 </main>
 
@@ -625,11 +776,15 @@
     <span class="footer-value">{plugin_version}</span>
   </div>
   <div class="footer-item">
-    <span class="footer-label">Criteria evaluated</span>
+    <span class="footer-label">V1 evaluated</span>
     <span class="footer-value">{total_applicable}</span>
   </div>
   <div class="footer-item">
-    <span class="footer-label">Criteria skipped</span>
+    <span class="footer-label">V2 evaluated</span>
+    <span class="footer-value">{v2_total_applicable}</span>
+  </div>
+  <div class="footer-item">
+    <span class="footer-label">Total skipped</span>
     <span class="footer-value">{criteria_skipped}</span>
   </div>
   <div class="footer-item">
@@ -640,7 +795,7 @@
     <span class="footer-label">Assessment duration</span>
     <span class="footer-value">{assessment_duration}</span>
   </div>
-  <p class="brand-line">Generated by Agent Fit · agent-readiness assessment</p>
+  <p class="brand-line">Generated by Agent Fit · coding-agent & agent-as-user readiness assessment</p>
 </footer>
 
 </div>
@@ -729,6 +884,87 @@
   });
 
   applyFilters();
+
+  // Consumer tab (Agent as User) filtering
+  const cButtons = Array.from(document.querySelectorAll('#consumer-criteria-toolbar .filter-btn'));
+  const cSearchInput = document.getElementById('consumer-criteria-search');
+  const cClearSearch = document.getElementById('consumer-clear-search');
+  const cLevelSelect = document.getElementById('consumer-level-filter');
+  const cFilterCount = document.getElementById('consumer-filter-count');
+  const cEmptyState = document.getElementById('consumer-criteria-empty');
+  const cToolbar = document.getElementById('consumer-criteria-toolbar');
+  const cRows = Array.from(document.querySelectorAll('#tab-consumer .criterion-row'));
+  const cGroups = Array.from(document.querySelectorAll('#tab-consumer .pillar-group'));
+  const cTotalRows = cRows.length;
+  let cStatusFilter = 'all';
+
+  const applyConsumerFilters = () => {
+    let visibleCount = 0;
+    cRows.forEach((row) => {
+      const matchesStatus = cStatusFilter === 'all' || row.dataset.status === cStatusFilter;
+      const matchesLevel = cLevelSelect.value === 'all' || row.dataset.level === cLevelSelect.value;
+      const query = (cSearchInput.value || '').trim().toLowerCase();
+      const matchesQuery = !query || (row.dataset.name || '').toLowerCase().includes(query);
+      const visible = matchesStatus && matchesLevel && matchesQuery;
+      row.style.display = visible ? '' : 'none';
+      if (visible) visibleCount += 1;
+    });
+    cGroups.forEach((group) => {
+      const anyVisible = Array.from(group.querySelectorAll('.criterion-row')).some((row) => row.style.display !== 'none');
+      group.style.display = anyVisible ? '' : 'none';
+    });
+    cEmptyState.classList.toggle('visible', visibleCount === 0);
+    cFilterCount.textContent = visibleCount === cTotalRows
+      ? `Showing all ${cTotalRows} criteria`
+      : `Showing ${visibleCount} of ${cTotalRows} criteria`;
+  };
+
+  cButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      cStatusFilter = btn.dataset.status || 'all';
+      cButtons.forEach((b) => b.classList.toggle('active', b === btn));
+      applyConsumerFilters();
+    });
+  });
+  if (cSearchInput) cSearchInput.addEventListener('input', applyConsumerFilters);
+  if (cClearSearch) cClearSearch.addEventListener('click', () => { cSearchInput.value = ''; cSearchInput.focus(); applyConsumerFilters(); });
+  if (cLevelSelect) cLevelSelect.addEventListener('change', applyConsumerFilters);
+
+  const setAllConsumerCollapsed = (collapsed) => {
+    cGroups.forEach((group) => {
+      const header = group.querySelector('.pillar-header.toggle');
+      group.classList.toggle('collapsed', collapsed);
+      if (header) header.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    });
+  };
+  const cExpandAll = document.getElementById('consumer-expand-all');
+  const cCollapseAll = document.getElementById('consumer-collapse-all');
+  if (cExpandAll) cExpandAll.addEventListener('click', () => setAllConsumerCollapsed(false));
+  if (cCollapseAll) cCollapseAll.addEventListener('click', () => setAllConsumerCollapsed(true));
+
+  cGroups.forEach((group) => {
+    const header = group.querySelector('.pillar-header.toggle');
+    if (!header) return;
+    const toggle = () => {
+      const collapsed = group.classList.toggle('collapsed');
+      header.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    };
+    header.addEventListener('click', toggle);
+    header.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        toggle();
+      }
+    });
+  });
+
+  if (cToolbar) {
+    window.addEventListener('scroll', () => {
+      cToolbar.classList.toggle('is-scrolled', window.scrollY > 80);
+    }, { passive: true });
+  }
+
+  applyConsumerFilters();
 
   document.querySelectorAll('.tab-btn').forEach((btn) => {
     btn.addEventListener('click', () => {

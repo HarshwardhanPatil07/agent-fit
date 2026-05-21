@@ -1,5 +1,5 @@
 ---
-description: Evaluates codebase agent-readiness across 9 pillars, 80+ criteria, and 5 maturity levels — produces an HTML report with pass rate scoring
+description: Evaluates codebase agent-readiness across 9 pillars (coding agent) + 5 pillars (agent as user), 140+ criteria total, and 5 maturity levels — produces an HTML report with pass rate scoring
 ---
 
 When invoked, perform the following assessment. This is a READ-ONLY analysis — do NOT modify any files in the target codebase. The only files you create are the HTML report and its JSON sidecar.
@@ -27,6 +27,20 @@ When invoked, perform the following assessment. This is a READ-ONLY analysis —
    - If `true`, extract upstream via `gh api repos/{owner}/{repo} --jq '.parent.full_name' 2>/dev/null`
    - Record `is_fork: true/false` and `upstream_repo` if applicable
    - When fork is detected: for GitHub API criteria (`branch_protection`, `secret_scanning`, `backlog_health`, `issue_labeling_system`), evaluate against the upstream repo instead, or skip with evidence "Fork detected; criterion evaluated against upstream {upstream_repo}"
+
+### Detect Primary Interface Type (for Agent-as-User assessment)
+
+Before evaluating agent-as-user criteria, determine what kind of programmatic interface the project exposes:
+
+- **REST/HTTP API**: Check for HTTP server frameworks (Express, Fastify, Koa, Gin, Chi, Echo, Fiber, FastAPI, Flask, Django REST, Actix-web, Rocket, Warp, Spring Boot, ASP.NET) in dependencies or route handler definitions in source code.
+- **GraphQL API**: Check for GraphQL server libraries (`apollo-server`, `gqlgen`, `strawberry-graphql`, `juniper`, `sangria`, `graphql-java`) in dependencies.
+- **gRPC Service**: Check for `.proto` files, `protoc` usage, gRPC dependencies.
+- **MCP Server**: Check for MCP SDK imports (`@modelcontextprotocol/sdk`, `mcp` Python package), `server.tool()` calls, `.well-known/mcp.json`.
+- **CLI Tool**: Check for `package.json` with `bin` field, `cmd/` directory (Go), `[[bin]]` in `Cargo.toml`, `console_scripts` in Python config, `cobra`/`clap`/`click`/`argparse`/`commander` in dependencies.
+- **Library/SDK**: Check if the project exposes an API for other code to import but does not run as a server.
+- **Web App (Frontend-only)**: Check for frontend frameworks without backend server code.
+
+Record ALL detected interface types. A project may match multiple types (e.g., REST API + CLI + MCP Server).
 
 ### Grounding on Previous Reports
 
@@ -287,6 +301,148 @@ Evaluate each criterion. For all config-parsing criteria, read the actual config
 
 3. **experiment_infrastructure** (config_parsing) — Check for: A/B testing framework, feature flags with metrics integration, experiment platform config. FOUND if experiment infrastructure exists.
 
+## Step 2b: Evaluate Agent-as-User Criteria
+
+In addition to the coding agent criteria above, evaluate whether AI agents can consume this software as users/consumers. Use the detected interface types from Step 1 to determine skip rules.
+
+### Agent-as-User Criteria Skip Rules
+
+Skip a criterion (mark as `—/—`) when:
+- It checks for server/API behavior but the project is a library with no server component
+- It checks for CLI structured output but the project has no CLI
+- It checks for SDK/client libraries but the project IS an SDK/library itself
+- It checks for auth patterns but the project has no authentication system
+- It checks for gRPC/GraphQL but the project uses a different interface paradigm (don't penalize REST-only for lacking gRPC)
+- It checks for rate limiting but the project has no HTTP server
+- It checks for pagination but the project has no list endpoints
+- It checks for health checks but the project is a CLI tool or library
+- It checks for webhook events but the project has no event system
+- It requires `gh` CLI but `gh auth status` fails or `gh` is not installed
+
+When skipping, always explain why in the evidence field.
+
+### V2 Pillar 1: Machine-Readable Interfaces (12 criteria)
+
+1. **v2_rest_api_exists** (code_search) — Search for HTTP route handler definitions: Express `app.get/post/put/delete/use`, FastAPI `@app.get/@app.post`, Gin `router.GET/POST`, Flask `@app.route`, Actix `web::resource`, Spring `@RequestMapping/@GetMapping/@PostMapping`, Rails `routes.rb` with route definitions, ASP.NET `[HttpGet]/[HttpPost]`, Chi `r.Get/r.Post`, Echo `e.GET/e.POST`, Fiber `app.Get/app.Post`, Django `urlpatterns`, Hono `app.get/app.post`, Koa with `koa-router`. FOUND if any HTTP route handler definitions exist in source code.
+
+2. **v2_openapi_spec** (file_existence + dependency_check) — Check for: `openapi.yaml`, `openapi.json`, `openapi.yml`, `swagger.yaml`, `swagger.json`, `swagger.yml`, `api-spec.*`, `docs/openapi.*`, `api/openapi.*`. Also check for auto-generation tools: `@nestjs/swagger`, `drf-spectacular`, `drf-yasg`, `swaggo/swag`, `utoipa`, `springdoc-openapi`, `FastAPI` (auto-generates). FOUND if OpenAPI/Swagger spec file exists or auto-generation is configured.
+
+3. **v2_mcp_server** (file_existence + config_parsing + code_search) — Check for: `.well-known/mcp.json`, `mcp.json` at root, MCP server implementation via imports of `@modelcontextprotocol/sdk`, `mcp` Python package, `server.tool()` or `server.resource()` calls in source, `mcp` section in `package.json`, MCP tool definitions with `name`/`description`/`inputSchema` fields. FOUND if MCP server is configured with at least one tool definition.
+
+4. **v2_cli_structured_output** (code_search + doc_content) — Check for CLI entry points AND evidence of structured output: `--output json`, `--format json`, `-o json`, `--json` flag definitions, JSON marshaling in CLI output path. SKIP if no CLI entry point exists. FOUND if CLI exists with JSON/structured output option.
+
+5. **v2_grpc_protobuf** (file_existence + dependency_check) — Check for `.proto` files, `protoc` in build scripts, `buf.yaml` or `buf.gen.yaml`, gRPC dependencies. SKIP if project uses a different interface paradigm and gRPC is not relevant. FOUND if Protocol Buffer definitions or gRPC service implementation exists.
+
+6. **v2_graphql_schema** (file_existence + dependency_check) — Check for `*.graphql` schema files, GraphQL server dependencies (`apollo-server`, `gqlgen`, `strawberry-graphql`, `juniper`), GraphQL type definitions in code. SKIP if project uses a different interface paradigm. FOUND if GraphQL schema or server exists.
+
+7. **v2_webhook_events** (code_search + doc_content) — Check for webhook handler registration/sending code, webhook URL configuration, event system with subscriber/listener registration. SKIP if project has no event system and is a library/CLI. FOUND if webhook or event system exists for external consumers.
+
+8. **v2_api_versioning** (code_search + config_parsing) — Check for version prefix in route paths (`/v1/`, `/v2/`), `Accept-Version` header handling, versioned API modules. SKIP if no API exists. FOUND if API versioning is implemented.
+
+9. **v2_sdk_client_libraries** (file_existence + doc_content) — Check for `sdk/`, `client/`, `clients/` directories, auto-generated client code (`openapitools.json`), published SDK references. SKIP if project IS an SDK/library. FOUND if SDK or client library is provided or auto-generated.
+
+10. **v2_batch_bulk_endpoints** (code_search) — Check for batch/bulk route handlers (`/batch`, `/bulk`, `batch_create`, `bulk_update`). SKIP if no API exists. FOUND if batch/bulk operation endpoints exist.
+
+11. **v2_webmcp_support** (code_search + dependency_check) — Check for WebMCP implementation, `webmcp` in dependencies. SKIP if project has no web-facing component. FOUND if WebMCP support is implemented.
+
+12. **v2_sse_streaming_support** (code_search + dependency_check) — Check for SSE endpoints (`text/event-stream`), WebSocket streaming endpoints, streaming response handlers. SKIP if project has no HTTP server. FOUND if streaming or SSE endpoints exist.
+
+### V2 Pillar 2: Authentication & Access (12 criteria)
+
+1. **v2_api_key_auth** (code_search + config_parsing) — Check for API key validation middleware, `X-API-Key` header extraction, `Authorization: Bearer` token validation, API key generation code. SKIP if project has no auth system. FOUND if API key auth mechanism exists.
+
+2. **v2_no_captcha_on_api** (dependency_check + code_search) — Check for CAPTCHA libraries; if found, verify NOT applied to API paths. If no CAPTCHA present, auto-FOUND. SKIP if no auth system. FOUND if API endpoints are free from CAPTCHA.
+
+3. **v2_oauth2_m2m** (code_search + dependency_check) — Check for OAuth2 `client_credentials` grant type handling, M2M token endpoint, service-to-service auth. SKIP if no auth system. FOUND if M2M OAuth2 flow is supported.
+
+4. **v2_service_account_support** (code_search + doc_content) — Check for service/bot account creation logic, non-interactive user types in user model. SKIP if no user system. FOUND if service/bot accounts are supported.
+
+5. **v2_auth_docs_for_machines** (doc_content) — Check docs for auth documentation with code examples for programmatic auth (curl, SDK snippets, OAuth2 flow examples). SKIP if no auth system. FOUND if auth is documented with machine-consumable examples.
+
+6. **v2_scoped_permissions** (code_search) — Check for RBAC implementation, permission/scope definitions, role-based middleware, OAuth scope validation. SKIP if no auth system. FOUND if scoped permissions or RBAC exists.
+
+7. **v2_token_refresh** (code_search) — Check for refresh token generation, `/refresh` endpoints, JWT refresh logic. SKIP if no auth system. FOUND if token refresh mechanism exists.
+
+8. **v2_programmatic_key_management** (code_search) — Check for API endpoints for key creation/rotation/revocation. SKIP if no API key system. FOUND if API keys can be managed via API.
+
+9. **v2_oauth_discovery_metadata** (file_existence + code_search) — Check for `/.well-known/oauth-authorization-server`, `/.well-known/openid-configuration`, OAuth Protected Resource Metadata. SKIP if no OAuth system. FOUND if OAuth/OIDC discovery metadata endpoints are served.
+
+10. **v2_sandbox_test_environment** (doc_content + config_parsing) — Check for sandbox/test mode configuration, documented test API endpoints. SKIP if library or CLI. FOUND if sandbox/test environment is documented.
+
+11. **v2_pkce_support** (code_search) — Check for PKCE (RFC 7636) implementation: `code_verifier`, `code_challenge`, S256 method. SKIP if no OAuth system. FOUND if PKCE is implemented.
+
+12. **v2_web_bot_auth** (code_search + file_existence) — Check for HTTP message signatures (RFC 9421), `Signature`/`Signature-Input` header handling. SKIP if no HTTP server. FOUND if bot auth via HTTP message signatures is supported.
+
+### V2 Pillar 3: Agent Documentation (12 criteria)
+
+1. **v2_agents_md** (file_existence + doc_content) — Check for `AGENTS.md` or `CLAUDE.md` at root documenting how agents should interact with the software's interfaces, API endpoints, authentication, and capabilities. FOUND if agent-oriented instruction file exists with meaningful content.
+
+2. **v2_getting_started_with_code** (doc_content) — Check README.md, docs/ for a getting-started section with code examples: API calls (`curl`, `fetch`, SDK usage), installation + first request in <5 steps. FOUND if getting started guide contains code examples for programmatic usage.
+
+3. **v2_structured_readme** (doc_content) — Check README.md for machine-parseable structure: at least 3 of: H2 headers, code blocks, a table, endpoint/feature lists, installation instructions. FOUND if README has structured parseable layout.
+
+4. **v2_structured_api_reference** (file_existence + doc_content) — Check for structured API reference in `docs/api/`, auto-generated API docs (Swagger UI, Redoc, Sphinx autodoc, TypeDoc, GoDoc). FOUND if machine-parseable API reference exists.
+
+5. **v2_error_codes_documented** (doc_content + code_search) — Check for error code documentation with error code → meaning mapping, error code constants with descriptions. FOUND if error codes and meanings are documented.
+
+6. **v2_auth_quickstart** (doc_content) — Check docs for dedicated auth section with step-by-step code examples: obtain credentials → configure client → make first authenticated request. SKIP if no auth system. FOUND if auth quickstart with code examples exists.
+
+7. **v2_rate_limits_documented** (doc_content + code_search) — Check for rate limit documentation showing thresholds and behavior, `X-RateLimit` header references. SKIP if no rate limiting. FOUND if rate limits are documented.
+
+8. **v2_llms_txt** (file_existence) — Check for `llms.txt` at project root, in `public/`, or in `static/`. FOUND if llms.txt exists.
+
+9. **v2_llms_full_txt** (file_existence) — Check for `llms-full.txt` at project root, in `public/`, or in `static/`. SKIP if no documentation. FOUND if llms-full.txt exists.
+
+10. **v2_sdk_documentation** (doc_content + file_existence) — Check for SDK-specific READMEs in `sdk/` or `client/`, SDK usage examples. SKIP if no SDK/client library exists. FOUND if SDK docs with code examples exist.
+
+11. **v2_changelog_api_migration** (file_existence + doc_content) — Check for `CHANGELOG.md` with API-specific entries, `MIGRATION.md`/`UPGRADE.md` with version migration steps. SKIP if no versioned API. FOUND if API changelog or migration guide exists.
+
+12. **v2_markdown_content_negotiation** (code_search) — Check for content negotiation serving Markdown via `Accept: text/markdown` header. SKIP if no web server. FOUND if server can respond with Markdown content.
+
+### V2 Pillar 4: Discoverability (10 criteria)
+
+1. **v2_robots_txt_allows_agents** (file_existence + config_parsing) — Check for `robots.txt` with explicit AI bot rules (`GPTBot`, `ClaudeBot`, `Anthropic`) with `Allow` rules, or permissive `User-agent: *`. MISSING if robots.txt blocks AI agents or doesn't exist. SKIP if CLI/library with no web presence.
+
+2. **v2_plugin_skill_manifest** (file_existence) — Check for `.claude-plugin/plugin.json`, `.claude/skills/`, `.well-known/ai-plugin.json`, `.factory/skills/`. FOUND if any AI platform plugin/skill manifest exists.
+
+3. **v2_mcp_server_card** (file_existence + config_parsing) — Check for `.well-known/mcp.json` with descriptive metadata (name, description, version, capabilities). SKIP if no MCP server. FOUND if MCP server card exists with metadata.
+
+4. **v2_api_catalog_manifest** (file_existence + doc_content) — Check for `/.well-known/api-catalog` (RFC 9727), `api-catalog.json`, `capabilities.json`, comprehensive OpenAPI info+paths. FOUND if machine-readable API capabilities catalog exists.
+
+5. **v2_sitemap_structured_index** (file_existence) — Check for `sitemap.xml`, structured documentation index, `docs/index.json`. SKIP if no web presence. FOUND if sitemap or structured index exists.
+
+6. **v2_schema_structured_data** (code_search + file_existence) — Check for JSON-LD or Schema.org markup (`application/ld+json`), JSON Schema (`$schema`, `type`, `properties`). SKIP if no web-facing pages. FOUND if structured data markup exists.
+
+7. **v2_agent_skills_index** (file_existence) — Check for `.well-known/agent-skills/index.json` or `.well-known/agent-skills/` directory. SKIP if no web/API component. FOUND if agent skills index exists.
+
+8. **v2_link_headers_discovery** (code_search) — Check for `Link` response headers (RFC 8288) pointing to API catalog, docs, or MCP server card. SKIP if no HTTP server. FOUND if Link headers are configured.
+
+9. **v2_content_signals** (file_existence + config_parsing) — Check for `Content-Signal` directives in `robots.txt` declaring AI usage preferences. SKIP if no robots.txt or web presence. FOUND if Content-Signal directives exist.
+
+10. **v2_a2a_agent_card** (file_existence + code_search) — Check for `/.well-known/agent-card.json` (A2A protocol), A2A SDK imports, agent card with `name`/`description`/`url`/`skills` fields. SKIP if not an agent-capable service. FOUND if A2A Agent Card is defined.
+
+### V2 Pillar 5: Agent Experience — AX (10 criteria)
+
+1. **v2_structured_error_responses** (code_search) — Check for consistent error response format: RFC 7807 Problem Details, or custom JSON error envelope with `error`/`code`/`message` fields. HTML error pages do NOT count. SKIP if no API. FOUND if errors are structured JSON.
+
+2. **v2_health_check_endpoint** (code_search) — Search for `/health`, `/healthz`, `/ready` endpoint definitions, health check handlers. SKIP if CLI/library. FOUND if health check endpoint exists.
+
+3. **v2_cursor_pagination** (code_search) — Check for cursor-based pagination (`cursor`, `next_cursor`, `after`, `before`, `page_token`), `Link` header with `rel=next`. Offset-based does NOT count. SKIP if no list endpoints. FOUND if cursor/keyset pagination is implemented.
+
+4. **v2_rate_limit_headers** (code_search) — Check for `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` header setting in responses. SKIP if no rate limiting. FOUND if rate limit headers are sent.
+
+5. **v2_consistent_response_envelope** (code_search) — Check for consistent response wrapper pattern (`{ "data": ..., "meta": ... }`), response serializer/formatter types. Bare data with no wrapper does NOT count. SKIP if no API. FOUND if consistent format is used.
+
+6. **v2_idempotency_support** (code_search) — Check for `Idempotency-Key` header handling, request deduplication, PUT-for-update pattern. SKIP if no write endpoints. FOUND if idempotency is supported.
+
+7. **v2_request_correlation_id** (code_search) — Check for `X-Request-ID`/`X-Correlation-ID` header generation/propagation middleware. SKIP if no API. FOUND if correlation IDs are generated and propagated.
+
+8. **v2_retry_after_support** (code_search) — Check for `Retry-After` header in 429 or 503 responses. SKIP if no rate limiting or error middleware. FOUND if `Retry-After` header is sent.
+
+9. **v2_async_operation_patterns** (code_search) — Check for 202 Accepted responses with `Location` header, polling endpoints (`/status/{id}`, `/jobs/{id}`), callback/webhook URL acceptance. SKIP if all operations are synchronous. FOUND if async operation patterns exist.
+
+10. **v2_cors_configured** (code_search + config_parsing) — Check for CORS middleware/headers (`Access-Control-Allow-Origin`), CORS libraries. SKIP if CLI/library/no HTTP server. FOUND if CORS is configured.
+
 ## Step 3: Calculate Scores
 
 ### Per-Pillar Scores
@@ -386,6 +542,60 @@ Generate a short headline based on the strongest pillar or most notable pattern.
 
 Then write a 1-2 sentence summary: "{project_name} reaches Level {N} ({maturity_label}) with {total_passed}/{total_applicable} criteria passing. Key areas for improvement include the opportunities listed below."
 
+### Agent-as-User Scores (V2)
+
+Calculate the same set of metrics for the v2 (Agent-as-User) criteria independently. All v2 scores use the `v2_` prefix in placeholders.
+
+#### V2 Per-Pillar Scores
+
+For each v2 pillar (Machine-Readable Interfaces, Authentication & Access, Agent Documentation, Discoverability, Agent Experience), calculate `v2_criteria_passed`, `v2_criteria_total`, `v2_percentage` the same way as v1 pillars.
+
+#### V2 Overall Pass Rate
+
+- `v2_pass_rate` = round(`v2_total_passed` / `v2_total_applicable` * 100)
+
+#### V2 Weighted Score
+
+Impact tiers for v2 criteria:
+
+- **High (weight 3):** v2_rest_api_exists, v2_openapi_spec, v2_mcp_server, v2_api_key_auth, v2_no_captcha_on_api, v2_agents_md, v2_auth_docs_for_machines, v2_structured_api_reference, v2_structured_error_responses, v2_idempotency_support, v2_mcp_server_card, v2_oauth_discovery_metadata
+- **Medium (weight 2):** All v2 criteria not listed as high or low
+- **Low (weight 1):** v2_batch_bulk_endpoints, v2_sdk_documentation, v2_sitemap_structured_index, v2_schema_structured_data, v2_llms_txt, v2_webmcp_support, v2_link_headers_discovery
+
+Calculate: `v2_weighted_score = round(sum(v2_passed_criterion_weight) / sum(v2_applicable_criterion_weight) * 100)`
+
+#### V2 Maturity Level Calculation
+
+**Level-to-criteria mapping for v2:**
+
+**Level 1 (Accessible):** v2_rest_api_exists, v2_api_key_auth, v2_no_captcha_on_api, v2_agents_md, v2_getting_started_with_code, v2_structured_readme, v2_structured_error_responses, v2_health_check_endpoint
+
+**Level 2 (Documented):** v2_openapi_spec, v2_mcp_server, v2_cli_structured_output, v2_oauth2_m2m, v2_service_account_support, v2_auth_docs_for_machines, v2_structured_api_reference, v2_error_codes_documented, v2_auth_quickstart, v2_robots_txt_allows_agents, v2_plugin_skill_manifest, v2_cursor_pagination, v2_rate_limit_headers, v2_consistent_response_envelope, v2_content_signals, v2_cors_configured
+
+**Level 3 (Optimized):** v2_grpc_protobuf, v2_graphql_schema, v2_webhook_events, v2_api_versioning, v2_scoped_permissions, v2_token_refresh, v2_rate_limits_documented, v2_llms_txt, v2_llms_full_txt, v2_mcp_server_card, v2_api_catalog_manifest, v2_idempotency_support, v2_request_correlation_id, v2_sdk_documentation, v2_oauth_discovery_metadata, v2_agent_skills_index, v2_markdown_content_negotiation, v2_sse_streaming_support, v2_sandbox_test_environment, v2_async_operation_patterns, v2_pkce_support, v2_a2a_agent_card
+
+**Level 4 (Autonomous):** v2_sdk_client_libraries, v2_batch_bulk_endpoints, v2_programmatic_key_management, v2_changelog_api_migration, v2_sitemap_structured_index, v2_schema_structured_data, v2_retry_after_support, v2_webmcp_support, v2_link_headers_discovery, v2_web_bot_auth
+
+**Level 5 (Agent-First):** No criteria defined yet — auto-passes if L4 is met. Display as "No criteria defined" with 100%.
+
+Apply the same gated progression rule (≥80%) for v2 levels. Calculate `v2_maturity_level`, `v2_lN_pct`, `v2_lN_weight`, `v2_lN_gate_class`, `v2_lN_gate_status`.
+
+#### V2 Strengths, Opportunities, and Remediation
+
+Apply the same strengths/opportunities/remediation logic as v1, but scoped to v2 criteria. Use `v2_` prefixed placeholders: `{v2_strength_1_title}`, `{v2_opportunity_1_title}`, `{v2_summary_headline}`, `{v2_summary_text}`.
+
+**V2 Summary Headline** examples:
+- "API-Ready" (if Machine-Readable Interfaces is strongest)
+- "Well-Documented for Agents" (if Agent Documentation is highest)
+- "Auth-Ready" (if Authentication & Access is highest)
+- "Discoverable" (if Discoverability is highest)
+- "Great Agent UX" (if Agent Experience is highest)
+- "Needs Agent Interface" (if no API/CLI/MCP exists)
+
+V2 Summary text: "{project_name} reaches Agent-as-User Level {v2_maturity_level} ({v2_maturity_label}) with {v2_total_passed}/{v2_total_applicable} criteria passing ({v2_pass_rate}%). {One sentence about v2 key gap or strength}."
+
+Generate a v2 remediation roadmap from ALL missing v2 criteria, grouped by v2 maturity level (L1 → L5). Include in the HTML report's Remediation tab under a separate "Agent-as-User Remediation Roadmap" section, and in the JSON output under `v2_remediation`.
+
 ## Step 4: Generate HTML Report
 
 Create an HTML file with the complete assessment results. Write it to a temporary file and open it in the browser.
@@ -397,18 +607,28 @@ After writing the file, open it with: `open /tmp/agentfit-report-{project_name}.
 Also write the assessment data as JSON to `/tmp/agentfit-report-{project_name}.json` with this structure:
 ```json
 {
-  "schema_version": "1.0.0",
-  "skill_version": "1.0.0",
+  "schema_version": "1.1.0",
+  "skill_version": "1.1.0",
   "project_name": "{project_name}",
   "timestamp": "{ISO 8601 timestamp}",
   "pass_rate": {pass_rate},
   "weighted_score": {weighted_score},
   "maturity_level": {maturity_level},
+  "interface_types": ["{detected_interface_types}"],
   "criteria": {
     "{criterion_name}": { "status": "found|missing|skipped", "evidence": "..." }
   },
   "remediation": [
     { "criterion": "{name}", "level": {N}, "pillar": "{pillar_name}", "impact": "{high|medium|low}", "fix": "{language_aware_instruction}" }
+  ],
+  "v2_pass_rate": {v2_pass_rate},
+  "v2_weighted_score": {v2_weighted_score},
+  "v2_maturity_level": {v2_maturity_level},
+  "v2_criteria": {
+    "{v2_criterion_name}": { "status": "found|missing|skipped", "evidence": "..." }
+  },
+  "v2_remediation": [
+    { "criterion": "{name}", "level": {N}, "pillar": "{pillar_name}", "impact": "{high|medium|low}", "fix": "{instruction}" }
   ]
 }
 ```
@@ -418,7 +638,7 @@ This JSON file serves as the grounding reference for future evaluations and MUST
 
 Before generating HTML, capture:
 - **assessment_date**: ISO 8601 UTC timestamp when the run completes
-- **plugin_version**: Read `version` from `plugins/agentfit/.claude-plugin/plugin.json` (currently `1.0.0`)
+- **plugin_version**: `1.1.0` (hardcoded — this is the integrated v1+v2 skill version)
 - **git_sha**: `git -C {repo} rev-parse --short HEAD 2>/dev/null` or `unknown` if not a git repo
 - **assessment_duration**: Elapsed seconds since Step 1 started, formatted as `{N}s` or `{m}m {s}s`
 - **total_applicable** / **criteria_skipped**: Counts from the evaluation pass
@@ -804,6 +1024,18 @@ The HTML report MUST use this structure with inline CSS and inline JavaScript (z
   #tab-remediation .criterion-score.impact-medium { color: var(--warn); font-weight: 600; }
   #tab-remediation .criterion-score.impact-low { color: var(--muted); }
 
+  #tab-consumer .stat-grid { margin-bottom: 28px; }
+  #tab-consumer .summary-section { margin-bottom: 40px; }
+
+  .section-divider {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #fff;
+    margin: 40px 0 20px;
+    padding-top: 28px;
+    border-top: 1px solid var(--border);
+  }
+
   footer.report-footer {
     margin-top: 40px;
     padding: 24px 28px;
@@ -934,6 +1166,7 @@ The HTML report MUST use this structure with inline CSS and inline JavaScript (z
   <!-- TAB NAVIGATION -->
   <nav class="tab-nav">
     <button type="button" class="tab-btn active" data-tab="assessment">Assessment</button>
+    <button type="button" class="tab-btn" data-tab="consumer">Agent as User</button>
     <button type="button" class="tab-btn" data-tab="remediation">Remediation</button>
   </nav>
 
@@ -1022,6 +1255,121 @@ The HTML report MUST use this structure with inline CSS and inline JavaScript (z
 
   </div><!-- /tab-assessment -->
 
+  <!-- AGENT-AS-USER TAB -->
+  <div class="tab-panel" id="tab-consumer">
+
+  <div class="stat-grid">
+    <div class="stat-card accent"><div class="label">Pass Rate</div><div class="value">{v2_pass_rate}%</div></div>
+    <div class="stat-card"><div class="label">Weighted</div><div class="value">{v2_weighted_score}%</div></div>
+    <div class="stat-card warn"><div class="label">Evaluated</div><div class="value">{v2_total_applicable}</div></div>
+    <div class="stat-card"><div class="label">Skipped</div><div class="value">{v2_criteria_skipped}</div></div>
+  </div>
+
+  <section class="level-section">
+    <div class="level-bar">
+      <div class="level-segment l1" style="width:{v2_l1_weight}%"></div>
+      <div class="level-segment l2" style="width:{v2_l2_weight}%"></div>
+      <div class="level-segment l3" style="width:{v2_l3_weight}%"></div>
+      <div class="level-segment l4" style="width:{v2_l4_weight}%"></div>
+      <div class="level-segment l5" style="width:{v2_l5_weight}%"></div>
+    </div>
+    <div class="level-labels">
+      <div class="level-label" style="width:{v2_l1_weight}%"><span class="pct">{v2_l1_pct}%</span> <span class="name">L1</span></div>
+      <div class="level-label" style="width:{v2_l2_weight}%"><span class="pct">{v2_l2_pct}%</span> <span class="name">L2</span></div>
+      <div class="level-label" style="width:{v2_l3_weight}%"><span class="pct">{v2_l3_pct}%</span> <span class="name">L3</span></div>
+      <div class="level-label" style="width:{v2_l4_weight}%"><span class="pct">{v2_l4_pct}%</span> <span class="name">L4</span></div>
+      <div class="level-label" style="width:{v2_l5_weight}%"><span class="pct">{v2_l5_pct}%</span> <span class="name">L5</span></div>
+    </div>
+    <div class="level-gates">
+      <div class="gate-card {v2_l1_gate_class}"><span class="gate-pct">{v2_l1_pct}%</span><span class="gate-name">L1 Accessible</span><span class="gate-status">{v2_l1_gate_status}</span></div>
+      <div class="gate-card {v2_l2_gate_class}"><span class="gate-pct">{v2_l2_pct}%</span><span class="gate-name">L2 Documented</span><span class="gate-status">{v2_l2_gate_status}</span></div>
+      <div class="gate-card {v2_l3_gate_class}"><span class="gate-pct">{v2_l3_pct}%</span><span class="gate-name">L3 Optimized</span><span class="gate-status">{v2_l3_gate_status}</span></div>
+      <div class="gate-card {v2_l4_gate_class}"><span class="gate-pct">{v2_l4_pct}%</span><span class="gate-name">L4 Autonomous</span><span class="gate-status">{v2_l4_gate_status}</span></div>
+      <div class="gate-card {v2_l5_gate_class}"><span class="gate-pct">{v2_l5_pct}%</span><span class="gate-name">L5 Agent-First</span><span class="gate-status">{v2_l5_gate_status}</span></div>
+    </div>
+  </section>
+
+  <section class="summary-section">
+    <h2>{v2_summary_headline}</h2>
+    <p>{v2_summary_text}</p>
+    <div class="columns">
+      <div>
+        <h3 class="col-header">Strengths</h3>
+        <article class="highlight">
+          <div class="highlight-num green">01</div>
+          <div class="highlight-title">{v2_strength_1_title}</div>
+          <div class="highlight-detail">{v2_strength_1_detail}</div>
+        </article>
+        <!-- Repeat 02, 03 for additional v2 strengths -->
+      </div>
+      <div>
+        <h3 class="col-header">Opportunities</h3>
+        <article class="highlight">
+          <div class="highlight-num orange">01</div>
+          <div class="highlight-title">{v2_opportunity_1_title}</div>
+          <div class="highlight-detail">{v2_opportunity_1_detail}</div>
+        </article>
+        <!-- Repeat 02, 03 for additional v2 opportunities -->
+      </div>
+    </div>
+  </section>
+
+  <section class="criteria-section">
+    <div class="criteria-top">
+      <h2 class="criteria-header">All Criteria</h2>
+      <span id="consumer-filter-count">Showing all criteria</span>
+    </div>
+
+    <div class="toolbar" id="consumer-criteria-toolbar">
+      <div class="filter-group">
+        <button type="button" class="filter-btn active" data-status="all">Show All</button>
+        <button type="button" class="filter-btn" data-status="found">Found</button>
+        <button type="button" class="filter-btn" data-status="missing">Missing</button>
+        <button type="button" class="filter-btn" data-status="skipped">Skipped</button>
+      </div>
+      <div class="search-wrap">
+        <input id="consumer-criteria-search" type="search" placeholder="Search criteria by name…" aria-label="Search agent-as-user criteria">
+        <button type="button" class="ghost-btn" id="consumer-clear-search" title="Clear search">✕</button>
+      </div>
+      <select id="consumer-level-filter" aria-label="Filter by maturity level">
+        <option value="all">All Levels</option>
+        <option value="1">Level 1 — Accessible</option>
+        <option value="2">Level 2 — Documented</option>
+        <option value="3">Level 3 — Optimized</option>
+        <option value="4">Level 4 — Autonomous</option>
+        <option value="5">Level 5 — Agent-First</option>
+      </select>
+      <div class="toolbar-actions">
+        <button type="button" class="ghost-btn" id="consumer-expand-all">Expand all</button>
+        <button type="button" class="ghost-btn" id="consumer-collapse-all">Collapse all</button>
+      </div>
+    </div>
+
+    <div id="consumer-criteria-empty" class="empty-state">No criteria match the current filters. Try clearing search or changing status/level.</div>
+
+    <!-- Repeat for each v2 pillar (5 total) -->
+    <section class="pillar-group">
+      <div class="pillar-header toggle" role="button" tabindex="0" aria-expanded="true">
+        <span class="chevron" aria-hidden="true">▼</span>
+        <span class="pillar-name">{v2_pillar_name}</span>
+        <div class="pillar-mini-bar" aria-hidden="true"><span style="width:{v2_percentage}%"></span></div>
+        <span class="pillar-score">{v2_passed}/{v2_total} ({v2_percentage}%)</span>
+      </div>
+      <div class="pillar-body">
+        <!-- Repeat for each criterion in this v2 pillar -->
+        <div class="criterion-row {changed_class}" data-status="{found|missing|skipped}" data-level="{level}" data-name="{criterion_name}">
+          <span class="status-icon {pass|fail|skip}" aria-label="{pass: Passed|fail: Failed|skip: Skipped}">{✓|✗|—}</span>
+          <span class="level-tag">L{level}</span>
+          <span class="criterion-name">{criterion_name}</span>
+          <span class="criterion-score">{1/1|0/1|—/—}</span>
+          <span class="criterion-evidence">{evidence_text}</span>
+        </div>
+      </div>
+    </section>
+  </section>
+
+  </div><!-- /tab-consumer -->
+
   <!-- REMEDIATION TAB -->
   <div class="tab-panel" id="tab-remediation">
 
@@ -1047,6 +1395,29 @@ The HTML report MUST use this structure with inline CSS and inline JavaScript (z
     </section>
   </section>
 
+  <!-- V2 Agent-as-User Remediation -->
+  <section class="criteria-section" style="margin-top:40px;border-top:1px solid var(--border);padding-top:28px;">
+    <h2 class="criteria-header">Agent-as-User Remediation Roadmap</h2>
+    <p style="font-family:ui-monospace,monospace;font-size:0.72rem;color:var(--muted);margin-bottom:20px;">{v2_remediation_count} actionable fixes for agent-as-user criteria</p>
+
+    <!-- For each v2 maturity level (L1→L5) with missing criteria -->
+    <section class="pillar-group">
+      <div class="pillar-header">
+        <span class="pillar-name">Level {N} — {v2_level_label}</span>
+        <span class="pillar-score">{v2_missing_count} gaps</span>
+      </div>
+      <div class="pillar-body">
+        <!-- For each missing v2 criterion at this level -->
+        <div class="criterion-row">
+          <span class="status-icon fail" aria-label="Missing">▸</span>
+          <span class="criterion-name">{criterion_name}</span>
+          <span class="criterion-score impact-{high|medium|low}">{impact}</span>
+          <span class="criterion-evidence">{fix_instruction}</span>
+        </div>
+      </div>
+    </section>
+  </section>
+
   </div><!-- /tab-remediation -->
 </main>
 
@@ -1060,11 +1431,15 @@ The HTML report MUST use this structure with inline CSS and inline JavaScript (z
     <span class="footer-value">{plugin_version}</span>
   </div>
   <div class="footer-item">
-    <span class="footer-label">Criteria evaluated</span>
+    <span class="footer-label">V1 evaluated</span>
     <span class="footer-value">{total_applicable}</span>
   </div>
   <div class="footer-item">
-    <span class="footer-label">Criteria skipped</span>
+    <span class="footer-label">V2 evaluated</span>
+    <span class="footer-value">{v2_total_applicable}</span>
+  </div>
+  <div class="footer-item">
+    <span class="footer-label">Total skipped</span>
     <span class="footer-value">{criteria_skipped}</span>
   </div>
   <div class="footer-item">
@@ -1075,7 +1450,7 @@ The HTML report MUST use this structure with inline CSS and inline JavaScript (z
     <span class="footer-label">Assessment duration</span>
     <span class="footer-value">{assessment_duration}</span>
   </div>
-  <p class="brand-line">Generated by Agent Fit · agent-readiness assessment</p>
+  <p class="brand-line">Generated by Agent Fit · coding-agent & agent-as-user readiness assessment</p>
 </footer>
 
 <script>
@@ -1163,6 +1538,87 @@ The HTML report MUST use this structure with inline CSS and inline JavaScript (z
 
   applyFilters();
 
+  // Consumer tab (Agent as User) filtering
+  const cButtons = Array.from(document.querySelectorAll('#consumer-criteria-toolbar .filter-btn'));
+  const cSearchInput = document.getElementById('consumer-criteria-search');
+  const cClearSearch = document.getElementById('consumer-clear-search');
+  const cLevelSelect = document.getElementById('consumer-level-filter');
+  const cFilterCount = document.getElementById('consumer-filter-count');
+  const cEmptyState = document.getElementById('consumer-criteria-empty');
+  const cToolbar = document.getElementById('consumer-criteria-toolbar');
+  const cRows = Array.from(document.querySelectorAll('#tab-consumer .criterion-row'));
+  const cGroups = Array.from(document.querySelectorAll('#tab-consumer .pillar-group'));
+  const cTotalRows = cRows.length;
+  let cStatusFilter = 'all';
+
+  const applyConsumerFilters = () => {
+    let visibleCount = 0;
+    cRows.forEach((row) => {
+      const matchesStatus = cStatusFilter === 'all' || row.dataset.status === cStatusFilter;
+      const matchesLevel = cLevelSelect.value === 'all' || row.dataset.level === cLevelSelect.value;
+      const query = (cSearchInput.value || '').trim().toLowerCase();
+      const matchesQuery = !query || (row.dataset.name || '').toLowerCase().includes(query);
+      const visible = matchesStatus && matchesLevel && matchesQuery;
+      row.style.display = visible ? '' : 'none';
+      if (visible) visibleCount += 1;
+    });
+    cGroups.forEach((group) => {
+      const anyVisible = Array.from(group.querySelectorAll('.criterion-row')).some((row) => row.style.display !== 'none');
+      group.style.display = anyVisible ? '' : 'none';
+    });
+    cEmptyState.classList.toggle('visible', visibleCount === 0);
+    cFilterCount.textContent = visibleCount === cTotalRows
+      ? `Showing all ${cTotalRows} criteria`
+      : `Showing ${visibleCount} of ${cTotalRows} criteria`;
+  };
+
+  cButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      cStatusFilter = btn.dataset.status || 'all';
+      cButtons.forEach((b) => b.classList.toggle('active', b === btn));
+      applyConsumerFilters();
+    });
+  });
+  if (cSearchInput) cSearchInput.addEventListener('input', applyConsumerFilters);
+  if (cClearSearch) cClearSearch.addEventListener('click', () => { cSearchInput.value = ''; cSearchInput.focus(); applyConsumerFilters(); });
+  if (cLevelSelect) cLevelSelect.addEventListener('change', applyConsumerFilters);
+
+  const setAllConsumerCollapsed = (collapsed) => {
+    cGroups.forEach((group) => {
+      const header = group.querySelector('.pillar-header.toggle');
+      group.classList.toggle('collapsed', collapsed);
+      if (header) header.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    });
+  };
+  const cExpandAll = document.getElementById('consumer-expand-all');
+  const cCollapseAll = document.getElementById('consumer-collapse-all');
+  if (cExpandAll) cExpandAll.addEventListener('click', () => setAllConsumerCollapsed(false));
+  if (cCollapseAll) cCollapseAll.addEventListener('click', () => setAllConsumerCollapsed(true));
+
+  cGroups.forEach((group) => {
+    const header = group.querySelector('.pillar-header.toggle');
+    if (!header) return;
+    const toggle = () => {
+      const collapsed = group.classList.toggle('collapsed');
+      header.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    };
+    header.addEventListener('click', toggle);
+    header.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        toggle();
+      }
+    });
+  });
+
+  if (cToolbar) {
+    window.addEventListener('scroll', () => {
+      cToolbar.classList.toggle('is-scrolled', window.scrollY > 80);
+    }, { passive: true });
+  }
+
+  applyConsumerFilters();
+
   document.querySelectorAll('.tab-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
@@ -1186,9 +1642,10 @@ After opening the HTML report, print a brief summary to the console:
 
 ```
 Agent Fit Report: {project_name}
+
+═══ Coding Agent Readiness ═══
 Pass Rate: {pass_rate}% | Weighted: {weighted_score}% | Level: L{maturity_level} ({maturity_label})
-Report: /tmp/agentfit-report-{project_name}.html
-Remediation: {remediation_count} actionable fixes in roadmap (see report)
+Remediation: {remediation_count} actionable fixes in roadmap
 
 Pillars:
   Style & Validation:       {p1_passed}/{p1_total} ({p1_pct}%)
@@ -1207,9 +1664,30 @@ Levels:
   L3 Standardized:   {l3_pct}% {l3_gate_symbol}
   L4 Optimized:      {l4_pct}% {l4_gate_symbol}
   L5 Autonomous:     {l5_pct}% {l5_gate_symbol}
+
+═══ Agent-as-User Readiness ═══
+Pass Rate: {v2_pass_rate}% | Weighted: {v2_weighted_score}% | Level: L{v2_maturity_level} ({v2_maturity_label})
+Interfaces: {detected_interface_types}
+Remediation: {v2_remediation_count} actionable fixes in roadmap
+
+Pillars:
+  Interfaces:        {v2_p1_passed}/{v2_p1_total} ({v2_p1_pct}%)
+  Auth & Access:     {v2_p2_passed}/{v2_p2_total} ({v2_p2_pct}%)
+  Agent Docs:        {v2_p3_passed}/{v2_p3_total} ({v2_p3_pct}%)
+  Discoverability:   {v2_p4_passed}/{v2_p4_total} ({v2_p4_pct}%)
+  Agent Experience:  {v2_p5_passed}/{v2_p5_total} ({v2_p5_pct}%)
+
+Levels:
+  L1 Accessible:     {v2_l1_pct}% {v2_l1_gate_symbol} (gate: 80%)
+  L2 Documented:     {v2_l2_pct}% {v2_l2_gate_symbol} (gate: 80%)
+  L3 Optimized:      {v2_l3_pct}% {v2_l3_gate_symbol}
+  L4 Autonomous:     {v2_l4_pct}% {v2_l4_gate_symbol}
+  L5 Agent-First:    {v2_l5_pct}% {v2_l5_gate_symbol}
+
+Report: /tmp/agentfit-report-{project_name}.html
 ```
 
-Align level names and percentages in a fixed-width column (pad level labels to ~18 characters) so gate symbols line up in the console. Where symbols are:
+Align pillar names and level names in fixed-width columns (pad labels to ~18 characters) so percentages and gate symbols line up in the console. Where symbols are:
 - `✓` when that level gate is passed
 - `✗` when the level was evaluated but below the 80% gate
 - `— (blocked by L{n})` when a previous level gate is not yet passed (omit `(gate: 80%)` on blocked lines)
