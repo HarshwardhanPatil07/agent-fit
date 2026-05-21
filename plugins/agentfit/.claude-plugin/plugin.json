@@ -1,6 +1,6 @@
 {
   "name": "agentfit",
-  "description": "Assesses whether AI agents can consume your software — 5 pillars, 56 criteria across machine-readable interfaces, authentication, documentation, discoverability, and agent experience",
+  "description": "Evaluates codebase agent-readiness across 9 pillars (coding agent) + 5 pillars (agent as user), 140+ criteria total, and 5 maturity levels — produces an HTML report with pass rate scoring",
   "version": "1.1.0",
   "author": {
     "name": "HarshwardhanPatil07"
